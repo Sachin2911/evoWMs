@@ -1,10 +1,6 @@
 # Plan: `ms`, a command-line tool for running jobs on mscluster
 
-**Status: parked.** Written 10 November 2026. Start once MSS has fixed the `smohan` account (no Slurm association, not in `mscluster-users`; ticket sent 10 November 2026). Check with:
-
-```bash
-ssh msCluster 'sacctmgr -nP show user $USER withassoc'   # empty output = still broken
-```
+**Status: unblocked, not started.** Written 10 November 2026 and parked until MSS fixed the `smohan` account. MSS added the Slurm association the same day, and `sbatch` and `srun` were both verified working, so every command below can now be built and tested. Waiting on Sachin's go-ahead and the open questions at the end.
 
 ## Why
 
@@ -38,16 +34,16 @@ From `msClusterUserGuide.md`; these are the rules that shaped the design.
 
 ## Commands
 
-| Command | Does | Needs working account |
-|---|---|---|
-| `ms nodes` | Partition summary: idle / busy / down per partition, one line each | no |
-| `ms status [JOBID]` | My jobs, one line each: id, name, partition, state, elapsed, node, last status-file line | no (empty until jobs exist) |
-| `ms logs JOBID [-n N] [--err]` | Tail of the job's log, default 40 lines | no |
-| `ms sync` | Push the repo to the cluster (see open questions) | no |
-| `ms submit [opts] -- CMD` | Generate the `sbatch` script from a template, submit, print the job id | **yes** |
-| `ms wait JOBID...` | Block locally, checking every few minutes, exit when the jobs finish; exit code reflects success | **yes** |
-| `ms cancel JOBID` | `scancel` | **yes** |
-| `ms fetch JOBID [PATH]` | Pull results back to the laptop | **yes** |
+| Command | Does |
+|---|---|
+| `ms nodes` | Partition summary: idle / busy / down per partition, one line each |
+| `ms status [JOBID]` | My jobs, one line each: id, name, partition, state, elapsed, node, last status-file line |
+| `ms logs JOBID [-n N] [--err]` | Tail of the job's log, default 40 lines |
+| `ms sync` | Push the repo to the cluster (see open questions) |
+| `ms submit [opts] -- CMD` | Generate the `sbatch` script from a template, submit, print the job id |
+| `ms wait JOBID...` | Block locally, checking every few minutes, exit when the jobs finish; exit code reflects success |
+| `ms cancel JOBID` | `scancel` |
+| `ms fetch JOBID [PATH]` | Pull results back to the laptop |
 
 Output rules: plain text, one line per item, no banners, no raw Slurm tables. Errors say what failed and what to do next. `--json` on the read commands for scripts.
 
@@ -75,25 +71,35 @@ The largest saving. Each job writes a small file as it runs, for example `~/runs
 
 ## Build order
 
-1. **Now possible:** `nodes`, `status`, `logs`, `sync`, plus the shared SSH wrapper (BatchMode, timeout, single session, stdin closed for remote commands).
-2. **After the account works:** `submit`, `wait`, `cancel`, `fetch`, tested with a one-minute job on `batch`.
-3. **Then:** the status-file helper, and the section in `AGENTS.md` that makes `ms` the default route.
+1. `nodes`, `status`, `logs`, `sync`, plus the shared SSH wrapper (BatchMode, timeout, single session, stdin closed for remote commands).
+2. `submit`, `wait`, `cancel`, `fetch`, tested with a one-minute job on `batch`.
+3. The status-file helper, and the section in `AGENTS.md` that makes `ms` the default route.
 
-## To verify with the first real job
+## What the first probe jobs settled (10 November 2026)
 
-These are gaps in the guide that also affect the template. Fill them into `msClusterUserGuide.md` at the same time.
+Details are in `msClusterUserGuide.md`. The points that shape the tool:
 
-- GPU model and driver on `batch` nodes, on the small `biggpu` nodes, and on `gpuexpress`.
-- Whether `/scratch` exists on compute nodes and how big it is.
-- Whether `module` works inside a batch script, or needs the explicit `source`.
-- Whether the `pytorch/...` modules exist on compute nodes.
-- Whether compute nodes have internet access (decides how environments and data get there).
+- `module` is not defined inside a batch job. The template must `source /etc/profile.d/lmod.sh` first.
+- The `pytorch/...` modules exist on compute nodes but not on the login node, and the module list differs between partitions. `submit` cannot validate a module name from the login node.
+- Compute nodes have outbound internet, so a job can build its own environment and fetch its own data. Environment setup can therefore be a job, which keeps it off the login node.
+- There is no `/scratch`. Node-local space is `/tmp`, which is RAM-backed (16 GB on `batch`, 62 GB on `bigbatch`). Run directories and checkpoints go on NFS.
+- `batch` nodes have one RTX 3060 (12 GB), 6 cores / 12 threads, 30 GB RAM. That is the default target.
+- GPUs differ by node, not only by partition (`biggpu` mixes 2× 48 GB and 1× 96 GB machines), and Slurm does not track them. `submit` needs a way to pick nodes by GPU (`--nodelist`), driven by the node map in the guide.
+- `sinfo -t idle` includes drained nodes. `ms nodes` must count a node as free only when its state is exactly `idle`.
+- The system modules are Apptainer images exposed as shell functions, which do not survive into child processes. The job template should call `apptainer exec --nv "$PYTORCH_SIF" ...` directly rather than rely on a bare `python`.
+- The `pytorch` CUDA 13.3 image has Python 3.11, PyTorch 2.12.1, JAX, and `wandb` already; `gymnasium` and `lightning` are missing.
+- `srun` forwards stdin to the task, so inside a piped SSH script it needs `</dev/null`.
+
+## Still to verify
+
 - How a requeued job looks to `squeue`/`sacct`, so `wait` does not report it as finished.
+- How to add packages on top of the `pytorch` image (conda env under `~/.conda`, or `pip install --user`), tested in a job.
+- Hardware on the nodes that were busy or down during probing (`stampede`, `gpuexpress`, four `biggpu` nodes), if they are ever needed.
 
 ## Open questions
 
 - **Code sync:** `rsync` from the laptop, or `git pull` on the cluster from a remote? Rsync needs no remote and carries uncommitted work; git gives an exact commit per run.
-- **Environment:** the `anaconda` module, a personal conda/venv in home, or an Apptainer image? Depends on the research stack, which does not exist yet.
-- **Data:** the sideload hosts were down on 10 November 2026. How datasets reach `/datasets/smohan` depends on MSS's answer.
+- **Environment:** the `pytorch` module, the `anaconda` module, a personal venv in home, or an Apptainer image? Depends on the research stack, which does not exist yet.
+- **Data:** the sideload hosts were down on 10 November 2026. Compute nodes have internet, so a download job writing to `/datasets/smohan` is a working alternative until MSS answers.
 - **Sweeps:** job arrays (limit 1001) or many tasks packed into one whole node? Whole-node allocation favours packing.
 - **Name:** `ms` is short but generic; rename if it collides with something.
