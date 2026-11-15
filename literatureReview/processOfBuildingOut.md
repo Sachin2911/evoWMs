@@ -25,19 +25,6 @@ The review has three jobs:
 
 Stop collecting when new searches mostly return papers already on the list.
 
-## Applied to this project
-
-### Themes
-
-Each theme is a label and the question the literature must answer. Reading on a theme stops when the question can be answered.
-
-1. **The specification problem:** What must be hand-specified to make an RL agent safe today? (penalty and constraint methods, cost functions, Safety-Gymnasium, OmniSafe)
-2. **Safety by retraining:** How are world-model agents made safe at training time? (Dreamer, TD-MPC2, SafeDreamer)
-3. **Safety after training:** How is safety added to a fixed policy after training? (latent safety filters, UNISafe, AnySafe, Hamilton-Jacobi reachability, control barrier functions)
-4. **Evolution under constraints:** What has evolution done under constraints, and in safe RL? (Constrained Cross-Entropy Method, Marchesini et al., AutoCost, constraint handling in evolutionary algorithms)
-5. **Adapting frozen models:** How are frozen pretrained models adapted cheaply? (residual policies, adapters, evolution strategies on adapters such as ESSA)
-6. **Evaluation:** How are safe RL results expected to be measured and reported? (seeds, confidence intervals, held-out evaluation)
-
 ### Template for one annotation
 
 About 150 words, in my own words:
