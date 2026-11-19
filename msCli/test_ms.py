@@ -295,6 +295,23 @@ class Submit(Base):
         self.assertIn("ms: exit 0", log[3])
         self.assertIn("ms: start", self.ok("logs", "101"))
 
+    def test_jobs_are_pointed_at_the_hugging_face_token_file(self):
+        saved = config.HF_TOKEN_FILE
+        config.HF_TOKEN_FILE = self.write(os.path.join(self.home, "credentials", "hf_token"), "t")
+        try:
+            show = "import os; print('token file:', os.environ.get('HF_TOKEN_PATH'))"
+            self.ok("submit", "-n", "hf", "--", sys.executable, "-c", show)
+            self.run_job(101, name="job-hf")
+            self.ok("submit", "-n", "hf", "--", sys.executable, "-c", show)
+            os.remove(config.HF_TOKEN_FILE)
+            self.run_job(102, name="job-hf")
+        finally:
+            config.HF_TOKEN_FILE = saved
+        self.assertIn("token file: " + os.path.join(self.home, "credentials", "hf_token"),
+                      self.read(os.path.join(config.RUNS, "job-hf-101", "slurm.out")))
+        self.assertIn("token file: None",
+                      self.read(os.path.join(config.RUNS, "job-hf-102", "slurm.out")))
+
     def test_job_exit_code_is_the_commands(self):
         self.ok("submit", "-n", "bad", "--", sys.executable, "-c", "raise SystemExit(7)")
         self.assertEqual(self.run_job(101, name="job-bad").returncode, 7)

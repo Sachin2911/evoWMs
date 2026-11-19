@@ -103,6 +103,8 @@ def _environment(workdir, modules, venv, commit_to):
     q = shlex.quote
     lines = [
         "export PYTHONUNBUFFERED=1",
+        # Hugging Face reads its token from this file, so no job ever contains the token itself.
+        f"[ -f {q(config.HF_TOKEN_FILE)} ] && export HF_TOKEN_PATH={q(config.HF_TOKEN_FILE)}",
         # `module` is not defined inside a batch job until Lmod is sourced.
         "[ -f /etc/profile.d/lmod.sh ] && source /etc/profile.d/lmod.sh",
     ]

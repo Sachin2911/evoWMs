@@ -43,6 +43,7 @@ ms fetch 41235                             # -> results/<repo>-train-41235/
 - Partition `batch` unless `-p bigbatch`. Time limit one hour unless `-t` says otherwise (`02:00:00`, `90m`, `1d`); a limit over the partition's cap is refused.
 - Creates the run folder `~/runs/<repo>-<label>-<jobid>/` before the job starts and exports it as `MS_RUN_DIR`. The folder holds `slurm.out`, `job.sbatch`, `command.txt`, and `commit.txt` (the commit the job ran from).
 - Activates `.venv` in the working folder if there is one (`--env DIR` for another). `--module NAME` loads a module.
+- Sets `HF_TOKEN_PATH` to `~/credentials/hf_token` if that file exists, so Hugging Face downloads and uploads in a job are authenticated. The token stays in that one file on the cluster; it is never written into a script, a log, or this repo.
 - Passes everything after `--` to the node unchanged. No shell on the way interprets it, so quotes, brackets, `$`, and `*` arrive as typed, and shell features such as `&&` or `|` are not available; put those in a script and run the script.
 - Refuses to queue past the per-user cap for the partition.
 

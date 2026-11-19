@@ -9,6 +9,9 @@ DATASETS = "/datasets/smohan"
 # Every run gets a directory here: <RUNS>/<job-name>-<jobid>/
 RUNS = HOME + "/runs"
 
+# Hugging Face token, readable only by the account. Jobs are pointed at it; it is never copied.
+HF_TOKEN_FILE = HOME + "/credentials/hf_token"
+
 # The only partitions the tool submits to, with the per-user limits MSS enforces.
 PARTITIONS = {
     "batch": {"max_seconds": 1 * 86400, "max_running": 13, "max_submit": 100},
