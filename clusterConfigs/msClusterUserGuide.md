@@ -12,7 +12,7 @@ mscluster is the Wits Mathematical Sciences HPC cluster, run by Mathematical Sci
 - **Job submission works.** MSS added the Slurm association (account `general`, QoS `normal`) on 10 November 2026. Verified the same day with an `sbatch` job on `batch` (`mscluster219`) and an `srun` job on `bigbatch` (`mscluster44`); both completed and could write to home.
 - `smohan` is still not in the `mscluster-users` group. Nothing has been found that this blocks.
 - If submission ever fails with `Invalid account or account/partition combination specified`, the association is gone: check with `sacctmgr show user $USER withassoc` and open a ticket.
-- Compute-node facts below come from probe jobs run on 10 November 2026 on 11 nodes: seven in `batch`, one in `bigbatch`, three in `biggpu`. Nodes that were busy or down could not be probed; the node map says which.
+- Compute-node facts below come from probe jobs run on 10 November 2026 on seven `batch` nodes and one `bigbatch` node. Three `biggpu` nodes were probed too; see Partitions we do not use.
 - The probe scripts are in `~/runs/probe/` on the cluster (`hw.sh` prints one line of hardware facts per node; `mod.sh` inspects the modules). Rerun them to refresh this file.
 
 ## Access
@@ -57,37 +57,24 @@ For an agent this means:
 
 ## Partitions
 
-Slurm 25.11.2. Surveyed 10 November 2026; node states change daily.
+Slurm 25.11.2. Surveyed 10 November 2026; node states change daily. Our experiments run on `batch` and `bigbatch` only.
 
 | Partition | Nodes | CPUs / RAM per node (as Slurm reports) | Time limit | Per-user QoS: running jobs / queued jobs / nodes | State at survey |
 |---|---|---|---|---|---|
 | `batch` (default) | 100, `mscluster[120-219]` | 6 / 30 GB | 1 day | 13 / 100 / 25 | 83 idle, 1 busy, 16 down |
-| `stampede` | 20, `mscluster[22-41]` | 16 / 30 GB | 3 days | 2 / 20 / 5 | all 20 down |
 | `bigbatch` | 48, `mscluster[42-89]` | 14 / 124 GB | 3 days | 6 / 48 / 12 | 38 busy, 1 idle, 9 down |
-| `biggpu` | 7, `mscluster[106-112]` | mixed: three at 12 / 122 GB, two at 56 / 1 TB, two at 112 / 0.9–1 TB | 3 days | 1 / 6 / 2 (3 nodes max per job) | 3 busy, 2 idle, 2 down |
-| `gpuexpress` | 1, `mscluster116` | 12 / 188 GB | 1 hour | 1 / 12 / 1 | down since 30 June 2026 |
 
 ### Node map: what each node has
 
-Slurm does not track GPUs, so the node you land on decides the GPU you get. Request specific nodes with `--nodelist` (`-w`) or avoid them with `--exclude` (`-x`).
+Slurm does not track GPUs, so the partition you choose decides the GPU you get. Request specific nodes with `--nodelist` (`-w`) or avoid them with `--exclude` (`-x`).
 
 | Nodes | Partition | CPU | Cores / threads | RAM | GPU | Driver | Local disks | Checked |
 |---|---|---|---|---|---|---|---|---|
 | `mscluster[120-219]` | `batch` | Intel Core i5-14400 | 6 / 12 | 30 GB | 1× GeForce RTX 3060, 12 GB | 595.71.05 | 466 GB SATA SSD | 7 of 100 probed (130, 156, 172, 186, 201, 215, 219), all identical; Slurm reports the same shape for all 100 |
 | `mscluster[42-89]` | `bigbatch` | Intel Core i9-10940X | 14 / 28 | 123 GB | 1× GeForce RTX 3090, 24 GB | 595.91.07 | not recorded | 1 of 48 probed (44); MSS notices also say RTX 3090 |
-| `mscluster108` | `biggpu` | 2× Xeon Platinum 8280L | 56 / 112 | 1002 GB | 2× Quadro RTX 8000, 48 GB each | 595.91.07 | 7.3 TB HDD, 477 GB NVMe, 954 GB NVMe | probed |
-| `mscluster107` | `biggpu` | *(unverified)* | Slurm: 112 CPUs | 900 GB | *(unverified)* | | | busy, not probed. Same shape as 108, so probably the same hardware |
-| `mscluster[106,109]` | `biggpu` | *(unverified)* | Slurm: 56 CPUs | 1010 GB | *(unverified)*; 2× Quadro RTX 8000 in the 2024 guide | | | down |
-| `mscluster[111-112]` | `biggpu` | AMD Ryzen 9 9900X3D | 12 / 24 | 121 GB | 1× RTX PRO 6000 Blackwell, 96 GB | 595.91.07 | 256 GB SATA SSD, 1 TB NVMe | both probed, identical |
-| `mscluster110` | `biggpu` | *(unverified)* | Slurm: 12 CPUs | 122 GB | *(unverified)* | | | busy, not probed. Same shape as 111 and 112, so probably the same hardware |
-| `mscluster[22-41]` | `stampede` | *(unverified)* | Slurm: 16 CPUs | 30 GB | 2× GTX 1060, 6 GB each *(2024 guide)* | | | all 20 down |
-| `mscluster116` | `gpuexpress` | *(unverified)* | Slurm: 12 CPUs | 188 GB | *(unverified)* | | | down since 30 June 2026 |
 
 Notes on the map:
 
-- GPU memory per job, smallest to largest: 12 GB (`batch`), 24 GB (`bigbatch`), 2× 48 GB or 1× 96 GB (`biggpu`).
-- `biggpu` is two different kinds of machine under one name. `-w mscluster111` (or 112) gets a single 96 GB GPU with a small CPU and 121 GB RAM; `-w mscluster108` gets two 48 GB GPUs with 112 threads and 1 TB RAM. Without `-w` you get whichever is free.
-- Slurm counts physical cores on `batch`, `bigbatch`, and the Ryzen `biggpu` nodes (so `nproc` shows twice `SLURM_CPUS_ON_NODE`), but counts all 112 threads on `mscluster108`.
 - Every probed node runs Ubuntu 26.04 with kernel 7.0, has no `/scratch`, and has a RAM-backed `/tmp` sized at half its RAM.
 - When listing free nodes, filter on the state being exactly `idle`. `sinfo -t idle` also returns drained nodes, which cannot take jobs.
 
@@ -95,8 +82,15 @@ Choosing a partition:
 
 - Default to `batch`. MSS is actively steering smaller jobs there because `bigbatch` is oversubscribed. Its costs: 24-hour limit and **no UPS protection**, so a power dip kills the job.
 - Use `bigbatch` only when the job needs more than `batch`'s 30 GB RAM or 12 GB of GPU memory.
-- Use `biggpu` only for mature code that can really use that hardware (more than 24 GB of GPU memory, or hundreds of GB of RAM). MSS watches for misuse, and the cap is one running job per user.
 - September to November is the busy season; QoS caps are tightened then.
+
+### Partitions we do not use
+
+For reference only.
+
+- `biggpu`: 7 nodes, `mscluster[106-112]`, 3-day limit, one running job per user. Meant for mature code that needs more than 24 GB of GPU memory or hundreds of GB of RAM; MSS watches for misuse. It is two kinds of machine under one name, chosen with `-w`: `mscluster108` has 2× Quadro RTX 8000 (48 GB each), 112 threads, and 1 TB RAM; `mscluster[111-112]` have 1× RTX PRO 6000 Blackwell (96 GB), 12 cores, and 121 GB RAM. The other four nodes were busy or down and are *(unverified)*.
+- `stampede`: 20 nodes, `mscluster[22-41]`, 3-day limit, 2× GTX 1060 with 6 GB each *(2024 guide)*. All 20 were down at the survey.
+- `gpuexpress`: one node, `mscluster116`, 1-hour limit. Down since 30 June 2026.
 
 ## Slurm
 
@@ -104,7 +98,7 @@ How this cluster is configured, and what follows from it:
 
 - **Whole-node allocation** (`select/linear`). A job gets entire nodes, never a slice. Use all the cores and the GPU of a node you hold, and pack small tasks into one job rather than one node per task.
 - **No GRES.** GPUs are not tracked by Slurm. Do not pass `--gres=gpu:N`; you get the node's GPUs by getting the node. `CUDA_VISIBLE_DEVICES` is not set inside a job.
-- On most nodes Slurm's CPU count is physical cores: the job can see twice that many hyperthreads (`nproc`), while `SLURM_CPUS_ON_NODE` reports the core count. See the node map for the exception.
+- Slurm's CPU count is physical cores: the job can see twice that many hyperthreads (`nproc`), while `SLURM_CPUS_ON_NODE` reports the core count.
 - **Accounting is enforced** (`associations,limits`). No association, no jobs.
 - **No memory quota.** The limit is the node's physical RAM.
 - `MaxArraySize` is 1001. Backfill scheduling, multifactor priority.
@@ -142,9 +136,9 @@ The output directory must already exist and be writable. Always set `--time`; th
 |---|---|---|
 | `/home-mscluster/$USER` | 73 TB shared, 56% used | Code, environments, small data. Guideline of about 50 GB per user *(2024 guide)*; MSS emails heavy users and asks them to move data out. |
 | `/datasets/$USER` | 377 TB shared, 44% used | Datasets from tens of GB up to a few TB. Long-term. |
-| `/scratch` | — | **Does not exist**, on the login node or on any of the 11 compute nodes probed. |
-| `/tmp` on a compute node | half the node's RAM: 16 GB on `batch`, 62 GB on `bigbatch`, 61 GB or 502 GB on `biggpu` | RAM-backed (`tmpfs`), so files there use the job's memory and vanish with the node. |
-| Local disk on a compute node | 466 GB SSD on `batch`; SSD, NVMe, and HDD on `biggpu` (see node map) | The disks exist and hold the node's own system. No user-writable path on them has been identified; `/var/tmp` and similar were not tested. Ask MSS before relying on one. |
+| `/scratch` | — | **Does not exist**, on the login node or on any compute node probed. |
+| `/tmp` on a compute node | half the node's RAM: 16 GB on `batch`, 62 GB on `bigbatch` | RAM-backed (`tmpfs`), so files there use the job's memory and vanish with the node. |
+| Local disk on a compute node | 466 GB SSD on `batch`; not recorded on `bigbatch` | The disks exist and hold the node's own system. No user-writable path on them has been identified; `/var/tmp` and similar were not tested. Ask MSS before relying on one. |
 | `/gluster` | — | **Retired.** Not offered since 2026. |
 
 - Both shared filesystems are NFS, visible on the login node and mounted read-write on compute nodes. The file server has been overloaded by heavy I/O before; do few large reads and writes rather than many small ones.
@@ -165,7 +159,7 @@ export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 ```
 
-The 2024 guide's `cuda-12.0` no longer exists. Both CUDA directories are present on the compute nodes probed. NVIDIA driver is 595.91.07 on the login node (RTX 2060 SUPER), `bigbatch`, and `biggpu`, and 595.71.05 on `batch`.
+The 2024 guide's `cuda-12.0` no longer exists. Both CUDA directories are present on the compute nodes probed. NVIDIA driver is 595.91.07 on the login node (RTX 2060 SUPER) and `bigbatch`, and 595.71.05 on `batch`.
 
 **Modules (Lmod).** `module` is **not defined inside a batch job** (confirmed on `batch` and `bigbatch`), nor in any non-login shell. Put this at the top of every job script before the first `module load`:
 
@@ -209,7 +203,7 @@ The direct `apptainer exec --nv` form was run on a `batch` node and saw the RTX 
 
 ## Reliability
 
-The notices record power failures, cooling failures, network drops, and node crashes roughly monthly, including a complete power failure on 6 November 2026 and overheating that keeps `biggpu` and `stampede` at reduced capacity. Plan for it:
+The notices record power failures, cooling failures, network drops, and node crashes roughly monthly, including a complete power failure on 6 November 2026. Plan for it:
 
 - Checkpoint regularly and resume from the latest checkpoint on start.
 - Make jobs idempotent, since Slurm requeues and reruns them.
