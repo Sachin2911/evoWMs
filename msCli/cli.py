@@ -359,7 +359,7 @@ fi
 def cmd_rm(args):
     paths = " ".join(q(remote_path(p)) for p in args.paths)
     out = remote.run(f"""
-paths=()
+paths=(); big=()
 for a in {paths}; do
   p=$(ms_resolve_entry "$a") || exit 1
   [ -e "$p" ] || [ -L "$p" ] || ms_die "not found: $p (nothing was deleted)"
@@ -371,13 +371,17 @@ for p in "${{paths[@]}}"; do
     n=$(find "$p" -mindepth 1 2>/dev/null | head -n {config.BIG_TREE_ENTRIES + 1} | wc -l)
   fi
   if [ "$n" -gt {config.BIG_TREE_ENTRIES} ]; then
-    jid=$(ms_file_job rm rm -rf -- "$p") || exit 1
-    echo "JOB|$jid|$p"
+    big+=("$p")
   else
     rm -rf -- "$p" || ms_die "could not remove $p"
     echo "RM|$p"
   fi
 done
+# All the large trees go to one job, deleted one after another, to go easy on the file server.
+if [ "${{#big[@]}}" -gt 0 ]; then
+  jid=$(ms_file_job rm rm -rf -- "${{big[@]}}") || exit 1
+  for p in "${{big[@]}}"; do echo "JOB|$jid|$p"; done
+fi
 """)
     for line in out.splitlines():
         f = line.split("|")

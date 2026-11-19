@@ -143,7 +143,6 @@ The output directory must already exist and be writable. Always set `--time`; th
 
 - Both shared filesystems are NFS, visible on the login node and mounted read-write on compute nodes. The file server has been overloaded by heavy I/O before; do few large reads and writes rather than many small ones.
 - There is no `quota` command. Measure usage inside a job, not with `du` on the login node.
-- `/home-mscluster/smohan` still holds 2025 work (`alphafold3`, `ASC25`, `spack`, a self-built `gcc-14.2.0`) of unknown size.
 - Large downloads belong on the sideload hosts, which exist to place files and nothing else. Both were still down on 10 November 2026 after the account was fixed, and MSS has been asked about them. Do not pull large data through the login node.
 - Compute nodes have outbound internet (PyPI and GitHub both answered from `batch` and `bigbatch`), so a job can download its own data and install its own environment.
 

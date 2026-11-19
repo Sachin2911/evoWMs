@@ -234,16 +234,19 @@ class AllowedFolders(Base):
 
     def test_rm_of_a_large_tree_becomes_a_job(self):
         config.BIG_TREE_ENTRIES = 3
-        big = os.path.join(self.home, "big")
+        big, big2 = os.path.join(self.home, "big"), os.path.join(self.data, "big2")
         for i in range(6):
             self.write(os.path.join(big, f"f{i}"))
-        out = self.ok("rm", big)
-        self.assertIn("in job 101", out)
+            self.write(os.path.join(big2, f"f{i}"))
+        small = self.write(os.path.join(self.home, "small"))
+        out = self.ok("rm", big, small, big2)
+        self.assertEqual(out.count("in job 101"), 2)  # one job for both large trees
+        self.assertFalse(os.path.exists(small))
         self.assertTrue(os.path.isdir(big))  # not deleted on the login node
-        script = self.read(os.path.join(self.fake, "job-101.sh"))
-        self.assertIn("rm -rf -- " + big, script)
+        self.assertFalse(os.path.exists(os.path.join(self.fake, "job-102.sh")))
+        self.assertIn(f"rm -rf -- {big} {big2}", self.read(os.path.join(self.fake, "job-101.sh")))
         self.assertEqual(self.run_job(101).returncode, 0)
-        self.assertFalse(os.path.exists(big))
+        self.assertFalse(os.path.exists(big) or os.path.exists(big2))
 
     def test_mv(self):
         src = self.write(os.path.join(self.home, "a.txt"))
