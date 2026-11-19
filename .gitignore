@@ -1,3 +1,7 @@
 # Paper PDFs and their parsed full text stay local (public repo; publisher copyright).
 # Zotero holds the originals.
 papers/
+
+# Python bytecode, and run folders pulled back from the cluster by `ms fetch`.
+__pycache__/
+results/
