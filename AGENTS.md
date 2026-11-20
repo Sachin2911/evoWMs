@@ -2,6 +2,7 @@
 
 Running things on the cluster: use `msCli/ms`. It submits, watches, and collects jobs in one short command each and already follows the cluster's rules. `msCli/ms --help` lists the commands and `msCli/README.md` explains them. Do not write `sbatch` scripts or open your own SSH sessions unless `ms` cannot do the job.
 
+- Do all research compute on the cluster: image builds, package installs, simulator and model runs, experiments. Do not run them on the laptop, which is only for editing code and calling `ms`.
 - Start a wait with `msCli/ms wait JOBID` in the background and act when it returns; do not poll `status` in a loop.
 - `ms rm` has no undo. Only delete what the task calls for.
 

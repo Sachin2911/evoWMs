@@ -5,3 +5,6 @@ papers/
 # Python bytecode, and run folders pulled back from the cluster by `ms fetch`.
 __pycache__/
 results/
+
+# Built Apptainer images (several GB each); rebuild from the .def file.
+*.sif

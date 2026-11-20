@@ -1,0 +1,35 @@
+# Python packages for the SafeDreamer image (Python 3.8). Installed by safeDreamer.def.
+
+# Where pip finds the GPU builds of jaxlib; they are not on PyPI.
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# JAX, at the version SafeDreamer was written for. jaxlib is its compiled half, built for CUDA 11.
+jax==0.3.25
+jaxlib==0.3.25+cuda11.cudnn82
+
+# Versions fixed by SafeDreamer's own instructions.
+optax==0.1.4
+ruamel.yaml==0.17.21
+jax-jumpy==1.0.0
+
+# Listed by SafeDreamer with no version. Pinned to releases from the same period as JAX 0.3.25.
+numpy==1.23.5
+scipy==1.9.3
+chex==0.1.5
+tensorflow==2.11.1
+tensorflow-probability==0.19.0
+cloudpickle==2.2.1
+rich==13.3.5
+opencv-python==4.7.0.72
+matplotlib==3.7.1
+moviepy==1.0.3
+wandb==0.15.12
+
+# Versions fixed by the Safety-Gymnasium fork at the commit we use.
+gymnasium==0.28.1
+gymnasium-robotics==1.2.2
+pygame==2.1.0
+mujoco==2.3.3
+xmltodict==0.13.0
+pyyaml==6.0.1
+imageio==2.27.0
