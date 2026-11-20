@@ -1,65 +1,32 @@
-# Apptainer image for running SafeDreamer and its released checkpoints, soley because cluster doesn't have CUDA 11.8
+# Puts together the final SafeDreamer image on the cluster, from two public images:
+# our open-source one (built from the Dockerfile by GitHub) and NVIDIA's, which supplies CUDA.
 #
-# Build from this folder (the %files path below is relative to it):
-#   apptainer build --fakeroot safeDreamer.sif safeDreamer.def
+# It only copies files. There is no install step, because installing needs admin rights
+# inside the image and the cluster does not allow that.
 #
-# Run a command inside it, with the node's GPU:
-#   apptainer exec --nv safeDreamer.sif python3 some_script.py
+# Built by build_image.sh. To run a command inside the result, with the node's GPU:
+#   apptainer exec --nv ~/images/safeDreamer.sif python3 some_script.py
 
+# Stage 1: NVIDIA's image. Used only as the source of CUDA 11.8 and cuDNN 8.
 Bootstrap: docker
 From: nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
+Stage: cuda
 
-%files
-    requirements.txt /opt/requirements.txt
+# Stage 2: our image, pinned to the commit that built it, with CUDA copied in.
+Bootstrap: docker
+From: ghcr.io/sachin2911/safedreamer-base:49c775ea1061a25f3ec4e65c2924ca0f8da46419
+Stage: final
 
-%post
-    set -eu
-    export DEBIAN_FRONTEND=noninteractive
-
-    SAFEDREAMER_COMMIT=529221f02b54d5093e304d877eb2aaf6da63a9ff
-    SAFETY_GYMNASIUM_COMMIT=064c0c3f1dac523ffdf1e4daddba8262779344d4
-
-    # Ubuntu 20.04's python3 is Python 3.8, the version SafeDreamer was written for.
-    # The lib* packages are for drawing camera images without a screen:
-    # libegl1/libgl1/libopengl0/libglvnd0 for the GPU route, libosmesa6 for the CPU fallback.
-    # libglib2.0-0 is needed by OpenCV.
-    apt-get update
-    apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-dev git ca-certificates \
-        libegl1 libgl1 libopengl0 libglvnd0 libosmesa6 libglib2.0-0
-    rm -rf /var/lib/apt/lists/*
-
-    # `--nv` brings the node's NVIDIA graphics library into the container at run time,
-    # but not this small file that tells the system the library exists.
-    mkdir -p /usr/share/glvnd/egl_vendor.d
-    printf '%s\n' '{"file_format_version": "1.0.0", "ICD": {"library_path": "libEGL_nvidia.so.0"}}' \
-        > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
-
-    python3 -m pip install --no-cache-dir pip==24.0 setuptools==69.5.1 wheel==0.43.0
-    python3 -m pip install --no-cache-dir -r /opt/requirements.txt
-
-    # The simulator. Installed in "editable" mode so it runs from this clone:
-    # a normal install would leave out some of its 3D asset files.
-    # --no-deps because requirements.txt already pins what it needs.
-    git clone https://github.com/PKU-Alignment/safety-gymnasium.git /opt/safety-gymnasium
-    git -C /opt/safety-gymnasium checkout "$SAFETY_GYMNASIUM_COMMIT"
-    python3 -m pip install --no-cache-dir --no-deps -e /opt/safety-gymnasium
-
-    # SafeDreamer is run as scripts from its folder, so it is cloned and not installed.
-    git clone https://github.com/PKU-Alignment/SafeDreamer.git /opt/SafeDreamer
-    git -C /opt/SafeDreamer checkout "$SAFEDREAMER_COMMIT"
+%files from cuda
+    /usr/local/cuda-11.8 /usr/local/cuda-11.8
+    /usr/lib/x86_64-linux-gnu/libcudnn* /usr/lib/x86_64-linux-gnu/
 
 %environment
-    # Draw camera images on the GPU. Override with MUJOCO_GL=osmesa to use the CPU.
-    export MUJOCO_GL=egl
-    # Apptainer mounts the home folder; this stops Python picking up packages from ~/.local.
-    export PYTHONNOUSERSITE=1
-    export PYTHONUNBUFFERED=1
-    export LC_ALL=C.UTF-8
-
-%test
-    python3 -c "import jax, mujoco, safety_gymnasium, tensorflow, tensorflow_probability; print('imports ok: jax', jax.__version__, 'mujoco', mujoco.__version__)"
+    # Where JAX finds the CUDA programs (bin), libraries (lib64), and its compiler files.
+    export PATH=/usr/local/cuda-11.8/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:/usr/local/cuda-11.8/extras/CUPTI/lib64:${LD_LIBRARY_PATH:-}
+    export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda-11.8
 
 %labels
-    safedreamer.commit 529221f02b54d5093e304d877eb2aaf6da63a9ff
-    safety_gymnasium.commit 064c0c3f1dac523ffdf1e4daddba8262779344d4
+    base.image ghcr.io/sachin2911/safedreamer-base:49c775ea1061a25f3ec4e65c2924ca0f8da46419
+    cuda.image nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04

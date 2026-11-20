@@ -8,7 +8,7 @@ set -euo pipefail
 IMAGE_DIR="$HOME/images"
 WORK_DIR="/tmp/$USER-safedreamer-build"
 
-# Apptainer downloads and unpacks the base image in its temporary folders, about 25 GB in all.
+# Apptainer downloads and unpacks both source images in its temporary folders, about 25 GB in all.
 # They go in /tmp, which is on the node itself; home is a shared network folder and too slow for this.
 # On the cluster /tmp is held in RAM, and only bigbatch nodes have enough of it.
 free_gb=$(df --output=avail -BG /tmp | tail -1 | tr -dc '0-9')
@@ -23,7 +23,8 @@ mkdir -p "$IMAGE_DIR" "$APPTAINER_TMPDIR" "$APPTAINER_CACHEDIR"
 # /tmp is the node's memory, so clear it whether the build succeeds or fails.
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-apptainer build --fakeroot "$WORK_DIR/safeDreamer.sif" safeDreamer.def
+# No --fakeroot: the recipe only copies files, so it needs no admin rights inside the image.
+apptainer build "$WORK_DIR/safeDreamer.sif" safeDreamer.def
 
 # One large copy to shared storage, done only after the build has succeeded.
 mv "$WORK_DIR/safeDreamer.sif" "$IMAGE_DIR/safeDreamer.sif"
