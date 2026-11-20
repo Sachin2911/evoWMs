@@ -1,0 +1,51 @@
+# Builds safeDreamerImage/Dockerfile on GitHub's servers and uploads the result to
+# GitHub's container registry, where the cluster can fetch it.
+
+name: Build SafeDreamer base image
+
+on:
+  # Run when the image's recipe or package list changes on main...
+  push:
+    branches: [main]
+    paths:
+      - safeDreamerImage/Dockerfile
+      - safeDreamerImage/requirements.txt
+      - .github/workflows/safedreamer-image.yml
+  # ...or when started by hand from the repo's Actions tab.
+  workflow_dispatch:
+
+# What the job's temporary GitHub token may do: read the code, upload images.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Registry names must be lower case, and the account name has a capital letter.
+      - name: Work out the image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/safedreamer-base" >> "$GITHUB_ENV"
+
+      - name: Log in to the container registry
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      # Two tags: the commit id, so any image can be traced to the exact code that built it,
+      # and "latest". The source label links the image to this repo on GitHub.
+      - name: Build
+        run: |
+          docker build \
+            --tag "$IMAGE:$GITHUB_SHA" \
+            --tag "$IMAGE:latest" \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            safeDreamerImage
+
+      - name: Show the image size
+        run: docker image ls "$IMAGE"
+
+      - name: Upload
+        run: docker push --all-tags "$IMAGE"
