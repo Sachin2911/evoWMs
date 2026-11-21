@@ -1,5 +1,6 @@
 #!/bin/bash
-# Uploads the rendering-check and cost-predictor records to a private Hugging Face dataset.
+# Uploads the experiment records in results/ to a private Hugging Face dataset: the rendering
+# check, the cost-predictor test and, once they exist, the adapter pilot's runs.
 #
 #   bash costPredictor/upload_to_hugging_face.sh        (from the top folder of the repo)
 #
@@ -37,7 +38,7 @@ hf_git() { git -c credential.helper= -c credential.helper="$helper" "$@"; }
 rm -rf "$STAGE"
 hf_git clone --quiet "https://huggingface.co/datasets/$DATASET" "$STAGE"
 git -C "$STAGE" lfs install --local >/dev/null
-git -C "$STAGE" lfs track '*.tar' '*.npz' >/dev/null
+git -C "$STAGE" lfs track '*.tar' '*.npz' '*.npy' >/dev/null
 
 cp costPredictor/dataset_card.md "$STAGE/README.md"
 mkdir -p "$STAGE/rendering_check" "$STAGE/cost_predictor/recordings" "$STAGE/cost_predictor/results"
@@ -53,13 +54,20 @@ for folder in "$RESULTS"/costPredictor/recordings/chunk0/*/; do
     mkdir -p "$STAGE/cost_predictor/results/$name"
     cp "$RESULTS/costPredictor/$name"/results.json "$RESULTS/costPredictor/$name"/latent_*.npz "$STAGE/cost_predictor/results/$name/"
 done
+# How the predictors do with fewer episodes, and the adapter pilot: copied as they are.
+for pair in costPredictor/efficiency:cost_predictor/efficiency adapterPilot:adapter_pilot; do
+    if [ -d "$RESULTS/${pair%%:*}" ]; then
+        mkdir -p "$STAGE/${pair##*:}"
+        cp -r "$RESULTS/${pair%%:*}/." "$STAGE/${pair##*:}/"
+    fi
+done
 
 git -C "$STAGE" add --all
 if git -C "$STAGE" diff --cached --quiet; then
     echo "nothing new to upload"
 else
     git -C "$STAGE" -c user.name="${DATASET%%/*}" -c user.email="${DATASET%%/*}@users.noreply.huggingface.co" \
-        commit --quiet -m "Rendering check and cost-predictor records (code commit $(git rev-parse --short HEAD))"
+        commit --quiet -m "Experiment records (code commit $(git rev-parse --short HEAD))"
     hf_git -C "$STAGE" push --quiet origin HEAD:main
     echo "uploaded to https://huggingface.co/datasets/$DATASET"
 fi
