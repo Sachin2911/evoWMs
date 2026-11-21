@@ -45,9 +45,13 @@ def load_checkpoint(agent, checkpoint_path):
     different variant or network size without complaint.
     """
     import embodied
+    import jax
 
     def shapes():
-        return {name: tuple(value.shape) for name, value in agent.varibs.items()}
+        # Most variables are one array, but an optimiser's state is a bundle of several,
+        # so each variable is described by the shapes of all the arrays inside it.
+        return {name: [np.shape(array) for array in jax.tree_util.tree_leaves(value)]
+                for name, value in agent.varibs.items()}
 
     expected = shapes()
     checkpoint = embodied.Checkpoint()
