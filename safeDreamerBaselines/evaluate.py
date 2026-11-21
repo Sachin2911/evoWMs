@@ -13,6 +13,8 @@ With --record FOLDER it also saves every simulator step and the layout of each w
 with --video-seeds a video of the chosen episodes; see recording.py. Everything for the
 checkpoint, the results file included, then goes in FOLDER/<checkpoint name>/. With
 --record-latents it also saves the world model's internal state at every decision.
+
+With --adapter FILE the agent's actions are changed by an evolved adapter (see adapterPilot).
 """
 
 import argparse
@@ -22,6 +24,7 @@ import pathlib
 import re
 import sys
 import time
+import types
 
 import numpy as np
 
@@ -76,6 +79,68 @@ def load_checkpoint(agent, checkpoint_path):
     return int(training_decisions)
 
 
+def read_name(checkpoint_path):
+    """The variant, task and training seed in a checkpoint's file name."""
+    match = NAME_PATTERN.search(str(checkpoint_path))
+    if not match:
+        raise SystemExit(f'Cannot read the variant and task from the name of {checkpoint_path}')
+    return match.groups()
+
+
+def build(checkpoint_path, safedreamer_options=()):
+    """Builds the simulator and the agent for a checkpoint, and loads the checkpoint into the agent."""
+    variant, task, training_seed = read_name(checkpoint_path)
+
+    # Imported here, not at the top, because importing SafeDreamer starts up JAX and TensorFlow.
+    import SafeDreamer  # noqa: F401  (also makes `embodied` importable)
+    import embodied
+    from embodied.envs.safetygym import SafetyGym
+    from SafeDreamer import agent as agt
+    from SafeDreamer import train as safedreamer_train
+
+    # The settings, built the way SafeDreamer's own entry script builds them.
+    config = embodied.Config(agt.Agent.configs['defaults']).update(agt.Agent.configs[variant])
+    config = embodied.Flags(config).parse(
+        ['--method', variant, '--task', task] + VARIANT_SETTINGS.get(variant, []) + list(safedreamer_options))
+
+    # The simulator, with the camera set-up the agent was trained on (two 64x64 images).
+    simulator_wrapper = SafetyGym(
+        task.split('_', 1)[1], platform=config.jax.platform, **config.env.safetygym)
+    env = embodied.BatchEnv([safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
+
+    agent = agt.Agent(env.obs_space, env.act_space, embodied.Counter(), config)
+    training_decisions = load_checkpoint(agent, checkpoint_path)
+    return types.SimpleNamespace(
+        agent=agent, env=env, simulator=simulator_wrapper._dmenv, config=config, variant=variant, task=task,
+        training_seed=int(training_seed), training_decisions=training_decisions,
+        steps_per_decision=config.env.safetygym.repeat,
+        penalty=safedreamer_train.PIDLagrangian(config).lagrange_penalty)
+
+
+def seed_episodes(simulator, agent, seeds, on_start=None):
+    """Makes every new episode start from the next seed in `seeds`.
+
+    The seed fixes both the layout of the world and the agent's random choices. Episode k is
+    then the same whichever checkpoint plays it, and however many episodes came before it.
+    SafeDreamer starts each episode by calling the simulator's reset, so that is where the
+    seed is set. Returns a dict that always holds the current episode's seed and start time.
+    """
+    current = {}
+    unseeded_reset = simulator.reset
+
+    def seeded_reset(**_):
+        current['seed'] = next(seeds)
+        current['start'] = time.perf_counter()
+        agent.rng = np.random.default_rng(current['seed'])
+        result = unseeded_reset(seed=current['seed'])
+        if on_start:
+            on_start(current['seed'])
+        return result
+
+    simulator.reset = seeded_reset
+    return current
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--checkpoint', required=True)
@@ -88,14 +153,12 @@ def main():
                         help='with --record: also save a video of the episodes with these seeds')
     parser.add_argument('--record-latents', action='store_true',
                         help="with --record: also save the world model's internal state at every decision")
+    parser.add_argument('--adapter', help="change the agent's actions with this evolved adapter (adapterPilot)")
     args, safedreamer_options = parser.parse_known_args()
     if (args.video_seeds or args.record_latents) and not args.record:
         parser.error('--video-seeds and --record-latents need --record')
 
-    match = NAME_PATTERN.search(args.checkpoint)
-    if not match:
-        raise SystemExit(f'Cannot read the variant and task from the name of {args.checkpoint}')
-    variant, task, training_seed = match.groups()
+    variant, task, training_seed = read_name(args.checkpoint)
 
     record_folder = None
     if args.record:
@@ -114,26 +177,9 @@ def main():
         print(f'{out_path} already has {done} episodes')
         return
 
-    # Imported here, not at the top, because importing SafeDreamer starts up JAX and TensorFlow.
-    import SafeDreamer  # noqa: F401  (also makes `embodied` importable)
-    import embodied
-    from embodied.envs.safetygym import SafetyGym
-    from SafeDreamer import agent as agt
-    from SafeDreamer import train as safedreamer_train
-
-    # The settings, built the way SafeDreamer's own entry script builds them.
-    config = embodied.Config(agt.Agent.configs['defaults']).update(agt.Agent.configs[variant])
-    config = embodied.Flags(config).parse(
-        ['--method', variant, '--task', task] + VARIANT_SETTINGS.get(variant, []) + safedreamer_options)
-
-    # The simulator, with the camera set-up the agent was trained on (two 64x64 images).
-    simulator_wrapper = SafetyGym(
-        task.split('_', 1)[1], platform=config.jax.platform, **config.env.safetygym)
-    simulator = simulator_wrapper._dmenv
-    env = embodied.BatchEnv([safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
-
-    agent = agt.Agent(env.obs_space, env.act_space, embodied.Counter(), config)
-    training_decisions = load_checkpoint(agent, args.checkpoint)
+    built = build(args.checkpoint, safedreamer_options)
+    agent, env, simulator, config = built.agent, built.env, built.simulator, built.config
+    training_decisions = built.training_decisions
 
     recorder = None
     if record_folder:
@@ -150,24 +196,9 @@ def main():
             'training_simulator_steps': training_decisions * steps_per_decision,
         }) + '\n')
 
-    # Every episode gets its own seed, which fixes both the layout of the world and the
-    # agent's random choices. Episode k is then the same whichever checkpoint plays it, and
-    # however many episodes came before it. SafeDreamer starts each episode by calling the
-    # simulator's reset, so that is where the seed is set.
+    # Every episode gets its own seed: episode k uses first-seed + k.
     seeds = iter(range(args.first_seed + done, args.first_seed + args.episodes))
-    current = {}
-    unseeded_reset = simulator.reset
-
-    def seeded_reset(**_):
-        current['seed'] = next(seeds)
-        current['start'] = time.perf_counter()
-        agent.rng = np.random.default_rng(current['seed'])
-        result = unseeded_reset(seed=current['seed'])
-        if recorder:
-            recorder.start_episode(current['seed'])
-        return result
-
-    simulator.reset = seeded_reset
+    current = seed_episodes(simulator, agent, seeds, recorder.start_episode if recorder else None)
 
     if recorder:
         # The recorder looks at the simulator after each of its steps, hooked in the same way.
@@ -192,6 +223,8 @@ def main():
             'decisions': len(episode['reward']) - 1,
             'seconds': round(time.perf_counter() - current['start'], 1),
         }
+        if args.adapter:
+            result['adapter'] = pathlib.Path(args.adapter).name
         if recorder:
             # Before the results line, so an episode counted as done always has its recording.
             recorder.finish_episode(episode)
@@ -199,17 +232,26 @@ def main():
             file.write(json.dumps(result) + '\n')
         print(result, flush=True)
 
+    import embodied
     driver = embodied.Driver(env)
     driver.on_episode(record)
-    penalty = safedreamer_train.PIDLagrangian(config).lagrange_penalty
+
+    if args.adapter:
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / 'adapterPilot'))
+        import adapter
+        weights, kind, net = adapter.load(args.adapter)
+        play = adapter.adapted_policy(agent, net, kind, lambda: weights)
+    else:
+        def play(*inputs):
+            return agent.policy(*inputs, mode='eval')
 
     def policy(*inputs):
-        actions, state = agent.policy(*inputs, mode='eval')
+        actions, state = play(*inputs)
         if args.record_latents:
             recorder.after_decision(state)
         return actions, state
 
-    driver(policy, episodes=args.episodes - done, lag=penalty)
+    driver(policy, episodes=args.episodes - done, lag=built.penalty)
 
     results = read_results(out_path)
     rewards = np.array([r['reward'] for r in results])

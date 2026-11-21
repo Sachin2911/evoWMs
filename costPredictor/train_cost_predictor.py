@@ -16,6 +16,10 @@ The same question is put to predictors that read different things:
 
 Episodes are split into training, validation and test sets as whole episodes, because
 neighbouring decisions of one episode are nearly identical. Results go to results.json.
+
+With --labelled-episodes N only N of the episodes outside the test set are used, four fifths
+of them for training and one fifth for validation. The test episodes stay the same, so runs
+with different N show how few episodes a predictor needs.
 """
 
 import argparse
@@ -28,6 +32,7 @@ HORIZONS = [1, 5, 15, 25]     # look-ahead lengths, in decisions
 HIDDEN = 16                   # size of the small network's one hidden layer
 EPOCHS = 30
 BATCH = 2048
+UPDATES = 29                  # weight updates per epoch at least: what one pass over 120 episodes gives
 
 
 def load_episode(folder, seed, repeat):
@@ -164,14 +169,22 @@ def train(inputs, labels, parts, hidden, seed):
     order_rng = np.random.default_rng(seed)
     train_rows = parts['train']
     best = (-1.0, None, None, 0)
+    # With few training episodes one pass is only a handful of updates, so the rows are gone
+    # through more than once per epoch: every training-set size then gets as many updates.
+    batches = max(len(train_rows) // BATCH, UPDATES)
+    passes = -(-batches * BATCH // len(train_rows))
     for epoch in range(1, EPOCHS + 1):
-        shuffled = order_rng.permutation(train_rows)
-        for start in range(0, len(shuffled) - BATCH + 1, BATCH):
+        shuffled = np.concatenate([order_rng.permutation(train_rows) for _ in range(passes)])
+        for start in range(0, batches * BATCH, BATCH):
             params, state = update(params, state, data, target, jnp.asarray(shuffled[start:start + BATCH]))
         scores = np.asarray(all_scores(params, data))
         validation = auroc(scores[parts['validation']], labels[parts['validation']])
-        if validation > best[0]:
-            best = (validation, scores, {name: np.asarray(value) for name, value in params.items()}, epoch)
+        weights = {name: np.asarray(value) for name, value in params.items()}
+        if np.isnan(validation):
+            # No cost at all in the validation episodes: nothing to choose by, so keep the latest.
+            best = (-1.0, scores, weights, epoch)
+        elif validation > best[0]:
+            best = (validation, scores, weights, epoch)
     _, scores, weights, epoch = best
     weights.update(mean=mean, spread=spread)
     return scores, weights, epoch
@@ -182,6 +195,9 @@ def main():
     parser.add_argument('--recordings', required=True, type=pathlib.Path, nargs='+')
     parser.add_argument('--out', required=True, type=pathlib.Path)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--labelled-episodes', type=int,
+                        help='use only this many of the episodes outside the test set')
+    parser.add_argument('--predictors', nargs='+', help='only these predictors (default: all five)')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(args.seed)
@@ -202,10 +218,17 @@ def main():
     # Whole episodes go to training (60%), validation (15%) or test (25%).
     order = rng.permutation(len(episodes))
     cut_train, cut_validation = int(0.6 * len(episodes)), int(0.75 * len(episodes))
-    part_of_episode = np.empty(len(episodes), dtype=object)
+    part_of_episode = np.full(len(episodes), 'unused', dtype=object)
     part_of_episode[order[:cut_train]] = 'train'
     part_of_episode[order[cut_train:cut_validation]] = 'validation'
     part_of_episode[order[cut_validation:]] = 'test'
+    if args.labelled_episodes:
+        # The first N in the shuffled order, so a smaller N is always a subset of a larger one.
+        labelled = order[:cut_validation][:args.labelled_episodes]
+        for_validation = max(1, round(len(labelled) / 5))
+        part_of_episode[order[:cut_validation]] = 'unused'
+        part_of_episode[labelled[:-for_validation]] = 'train'
+        part_of_episode[labelled[-for_validation:]] = 'validation'
 
     episode_of = np.concatenate([np.full(episode['decisions'], index) for index, episode in enumerate(episodes)])
     position = np.concatenate([np.arange(episode['decisions']) for episode in episodes])
@@ -219,12 +242,17 @@ def main():
     latent = np.concatenate([stoch, deter], 1)
     inputs = {'latent': latent, 'deter': deter, 'stoch': stoch,
               'privileged': np.concatenate([episode['privileged'] for episode in episodes]), 'shuffled': latent}
+    if args.predictors:
+        inputs = {name: inputs[name] for name in args.predictors}
 
     results = {
         'checkpoint': run['checkpoint'], 'task': run['task'], 'variant': run['variant'],
         'episodes': len(episodes), 'episode_seeds': [episodes[0]['seed'], episodes[-1]['seed']],
         'simulator_steps_per_decision': repeat,
-        'simulator_steps_used': int(sum(episode['decisions'] for episode in episodes) * repeat),
+        # Steps of the episodes the predictors learn from (training and validation): what
+        # gathering them costs in interaction with the simulator.
+        'simulator_steps_labelled': int(sum(
+            episode['decisions'] for episode, part in zip(episodes, part_of_episode) if part in ('train', 'validation')) * repeat),
         'episodes_in': {part: int((part_of_episode == part).sum()) for part in ('train', 'validation', 'test')},
         'decisions_with_cost': float(cost.mean()),
         'horizons': {},
