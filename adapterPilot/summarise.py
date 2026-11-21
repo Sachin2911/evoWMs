@@ -1,6 +1,6 @@
 """Prints the results of the adapter pilot's evolution runs side by side.
 
-  python3 summarise.py FOLDER
+  python3 summarise.py FOLDER [OTHER_AGENT.jsonl ...]
 
 FOLDER holds one sub-folder per run, as written by evolve.py and vast/pilot.sh. For each run:
 
@@ -8,6 +8,11 @@ FOLDER holds one sub-folder per run, as written by evolve.py and vast/pilot.sh. 
     evaluation seeds: mean reward, mean cost, and how many episodes were within the cost limit
   - how the centre of the search did on the validation seeds as steps were used
   - how well scores from inside the world model agree with scores from the simulator
+  - the constant part of each kept adapter, which changes the action in every state alike
+
+Runs whose names differ only in the evolution seed at the end ("-s0", "-s1") are also
+averaged together. Each OTHER_AGENT.jsonl is an evaluation of another agent on the same
+seeds, as written by evaluate.py, and is printed next to those averages for comparison.
 """
 
 import json
@@ -32,8 +37,17 @@ def rank_agreement(first, second):
     return float(np.corrcoef(first, second)[0, 1])
 
 
+def evaluation(path):
+    """Mean reward, mean cost, median cost and episodes within the limit, from one evaluation file."""
+    episodes = read_lines(path)
+    reward = np.array([episode['reward'] for episode in episodes])
+    cost = np.array([episode['cost'] for episode in episodes])
+    return reward.mean(), cost.mean(), np.median(cost), (cost <= COST_LIMIT).sum()
+
+
 def main():
     folder = pathlib.Path(sys.argv[1])
+    others = [pathlib.Path(name) for name in sys.argv[2:]]
     runs = sorted(path.parent for path in folder.glob('*/settings.json'))
 
     print('Kept adapters on the evaluation seeds 0 to 49')
@@ -51,6 +65,22 @@ def main():
                   f"{reward.mean():7.2f} ({reward.std():5.2f}) {cost.mean():7.2f} ({cost.std():5.2f}) {int((cost <= COST_LIMIT).sum()):6d} of {len(cost)}")
         if run == runs[-1]:
             print(f"{'unadapted (recorded)':24s} {'':>11s} {'':>10s} {'':>10s} {settings['unadapted_reward']:7.2f} {'':7s} {settings['unadapted_cost']:7.2f}")
+
+    print('\nThe same, averaged over evolution seeds')
+    print(f"{'configuration':58s} {'kept after':>11s} {'seeds':>5s} {'reward':>7s} {'cost':>7s} {'median cost':>11s} {'within limit':>12s}  thousand steps used")
+    groups = {}
+    for run in runs:
+        for kept in ('adapter_half_budget', 'adapter_full_budget'):
+            if (run / f'evaluation_{kept}.jsonl').exists():
+                steps = int(np.load(run / f'{kept}.npz')['steps_used']) // 1000
+                groups.setdefault((run.name.rsplit('-s', 1)[0], kept), []).append((*evaluation(run / f'evaluation_{kept}.jsonl'), steps))
+    for (name, kept), rows in groups.items():
+        reward, cost, median, within, steps = np.array(rows).T
+        print(f"{name:58s} {kept.split('_')[1] + ' budget':>11s} {len(rows):5d} {reward.mean():7.2f} {cost.mean():7.2f} {median.mean():11.2f} {within.mean():12.1f}  "
+              + ' / '.join(str(int(count)) for count in steps))
+    for other in others:
+        reward, cost, median, within = evaluation(other)
+        print(f"{other.stem:58s} {'':>11s} {'':>5s} {reward:7.2f} {cost:7.2f} {median:11.2f} {within:12.1f}")
 
     print('\nCentre of the search on the validation seeds: reward / cost at each validation, by thousand steps used')
     for run in runs:
@@ -74,6 +104,22 @@ def main():
         imagined_unadapted = np.mean([generation['imagined_unadapted']['cost'] for generation in generations]) if generations else float('nan')
         print(f"{run.name:24s} {len(generations):11d} {np.nanmean(agreement['cost']) if generations else float('nan'):7.2f} "
               f"{np.nanmean(agreement['reward']) if generations else float('nan'):7.2f} {imagined_unadapted:30.1f} / {settings['unadapted_cost']:.1f}")
+
+    print('\nConstant part of each kept adapter (the part that does not depend on what it reads), for the two')
+    print('action dimensions, and the typical size of the part that does depend on it')
+    print(f"{'run':30s} {'kept after':>11s} {'gain constants':>16s} {'shift constants':>16s}   {'reading part: gains, shifts':>32s}")
+    for run in runs:
+        for kept in ('adapter_half_budget', 'adapter_full_budget'):
+            if not (run / f'{kept}.npz').exists():
+                continue
+            data = np.load(run / f'{kept}.npz')
+            features = data['net_w1'].shape[0 if str(data['kind']) == 'deter' else 1]
+            constants = data['weights'][features * 4:]
+            matrix = data['weights'][:features * 4].reshape(features, 4) / np.sqrt(features)
+            # The size of the reading part if every feature were of size one and unrelated to the others.
+            typical = np.sqrt((matrix ** 2).sum(0))
+            print(f"{run.name:30s} {kept.split('_')[1] + ' budget':>11s} {constants[0]:8.2f} {constants[1]:7.2f} {constants[2]:8.2f} {constants[3]:7.2f}   "
+                  + ' '.join(f'{size:7.2f}' for size in typical))
 
 
 if __name__ == '__main__':

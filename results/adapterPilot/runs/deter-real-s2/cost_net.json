@@ -1,0 +1,17 @@
+{
+ "episodes_used": 25,
+ "seeds_used": [
+  1000,
+  1024
+ ],
+ "best_epoch": 26,
+ "unadapted_reward": 26.870732968405935,
+ "unadapted_cost": 69.56,
+ "cost_when_costly": 1.857357382774353,
+ "auroc_on_unused_episodes": {
+  "arrived": 0.9975101398651867,
+  "ahead5": 0.9935659898882853,
+  "ahead15": 0.9597823315343863
+ },
+ "unused_episodes": 25
+}

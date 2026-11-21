@@ -1,0 +1,148 @@
+Kept adapters on the evaluation seeds 0 to 49
+run                       kept after generation steps used         reward           cost within limit
+deter-imagined-s0        half budget          8     237000    1.76 ( 2.83)   11.74 (47.90)     42 of 50
+deter-imagined-s0        full budget          8     237000    1.76 ( 2.83)   11.74 (47.90)     42 of 50
+deter-imagined-s1        half budget         12     343000    0.84 ( 1.39)   17.28 (88.87)     43 of 50
+deter-imagined-s1        full budget         28     767000    3.57 ( 3.04)    3.96 (10.73)     42 of 50
+deter-imagined-s2        half budget         12     343000   -1.93 ( 0.91)    5.22 ( 8.84)     35 of 50
+deter-imagined-s2        full budget         32     873000    0.16 ( 0.91)    8.96 (53.97)     48 of 50
+deter-real-s0            half budget         16     449000   -3.55 ( 0.87)    2.68 ( 5.59)     40 of 50
+deter-real-s0            full budget         16     449000   -3.55 ( 0.87)    2.68 ( 5.59)     40 of 50
+deter-real-s1            half budget          8     237000    1.88 ( 2.73)   16.42 (59.23)     37 of 50
+deter-real-s1            full budget         36     979000   -2.44 ( 1.44)   13.46 (21.86)     31 of 50
+deter-real-s2            half budget         16     449000   -7.15 ( 2.42)    6.70 (10.90)     32 of 50
+deter-real-s2            full budget         28     767000   -2.90 ( 1.32)    9.04 (13.23)     29 of 50
+gated-imagined-penalty05-s0 half budget         12     343000   26.91 ( 1.31)   51.24 (35.84)      3 of 50
+gated-imagined-penalty05-s0 full budget         20     555000   26.77 ( 1.27)   50.42 (38.07)      7 of 50
+gated-imagined-s0        half budget         16     449000   12.19 ( 7.91)   21.00 (28.23)     21 of 50
+gated-imagined-s0        full budget         24     661000   11.12 ( 7.76)   17.70 (18.68)     18 of 50
+hidden-imagined-penalty05-s0 half budget         16     449000   17.91 ( 7.40)   25.94 (35.39)     16 of 50
+hidden-imagined-penalty05-s0 full budget         28     767000   17.31 ( 6.97)   26.72 (24.01)     14 of 50
+hidden-imagined-penalty10-s0 half budget         16     449000    7.96 ( 6.47)    2.26 ( 7.24)     43 of 50
+hidden-imagined-penalty10-s0 full budget         28     767000    8.51 ( 6.91)   22.20 (75.34)     40 of 50
+hidden-imagined-s0       half budget         16     449000    3.45 ( 3.56)    2.18 ( 6.90)     44 of 50
+hidden-imagined-s0       full budget         24     661000    4.43 ( 3.69)    2.24 (11.11)     47 of 50
+hidden-imagined-s1       half budget         12     343000    2.94 ( 2.75)    3.44 ( 8.89)     42 of 50
+hidden-imagined-s1       full budget         12     343000    2.94 ( 2.75)    3.44 ( 8.89)     42 of 50
+hidden-imagined-s2       half budget         16     449000    0.02 ( 2.90)    1.82 ( 5.83)     45 of 50
+hidden-imagined-s2       full budget         36     979000    1.73 ( 2.34)    3.40 (15.17)     47 of 50
+hidden-real-s0           half budget         16     449000  -12.27 ( 2.27)    4.40 ( 7.75)     37 of 50
+hidden-real-s0           full budget         24     661000   -3.71 ( 4.79)   11.88 (35.63)     37 of 50
+hidden-real-s1           half budget          8     237000   -5.58 ( 3.47)    4.88 (10.53)     39 of 50
+hidden-real-s1           full budget          8     237000   -5.58 ( 3.47)    4.88 (10.53)     39 of 50
+hidden-real-s2           half budget          8     237000   -1.94 ( 1.81)   15.44 (46.42)     40 of 50
+hidden-real-s2           full budget         20     555000   -1.59 ( 1.70)   11.60 (23.99)     35 of 50
+unadapted (recorded)                                         26.87           69.56
+
+The same, averaged over evolution seeds
+configuration                                               kept after seeds  reward    cost median cost within limit  thousand steps used
+deter-imagined                                             half budget     3    0.23   11.41        0.00         40.0  237 / 343 / 343
+deter-imagined                                             full budget     3    1.83    8.22        0.00         44.0  237 / 767 / 873
+deter-real                                                 half budget     3   -2.94    8.60        0.00         36.3  449 / 237 / 449
+deter-real                                                 full budget     3   -2.96    8.39        0.00         33.3  449 / 979 / 767
+gated-imagined-penalty05                                   half budget     1   26.91   51.24       52.00          3.0  343
+gated-imagined-penalty05                                   full budget     1   26.77   50.42       48.00          7.0  555
+gated-imagined                                             half budget     1   12.19   21.00        9.00         21.0  449
+gated-imagined                                             full budget     1   11.12   17.70       13.50         18.0  661
+hidden-imagined-penalty05                                  half budget     1   17.91   25.94       16.00         16.0  449
+hidden-imagined-penalty05                                  full budget     1   17.31   26.72       20.00         14.0  767
+hidden-imagined-penalty10                                  half budget     1    7.96    2.26        0.00         43.0  449
+hidden-imagined-penalty10                                  full budget     1    8.51   22.20        0.00         40.0  767
+hidden-imagined                                            half budget     3    2.14    2.48        0.00         43.7  449 / 343 / 449
+hidden-imagined                                            full budget     3    3.03    3.03        0.00         45.3  661 / 343 / 979
+hidden-real                                                half budget     3   -6.60    8.24        0.00         38.7  449 / 237 / 237
+hidden-real                                                full budget     3   -3.62    9.45        0.00         37.0  661 / 237 / 555
+20240327-144037_dreamerv3_safetygym_SafetyPointGoal1-v0_0                      26.93   54.52       43.50          2.0
+20240306-153904_bsrp_lag_safetygym_SafetyPointGoal1-v0_0                       21.74    0.88        0.00         45.0
+20240306-153904_bsrp_lag_safetygym_SafetyPointGoal1-v0_5                       21.38    0.78        0.00         46.0
+20240306-153904_bsrp_lag_safetygym_SafetyPointGoal1-v0_10                      21.60    1.80        0.00         40.0
+
+Centre of the search on the validation seeds: reward / cost at each validation, by thousand steps used
+deter-imagined-s0: first within the limit after 237000 steps
+   131k: 24.8/48.3  237k: 0.3/1.5  343k: 0.5/2.6  449k: 4.5/23.4  555k: 0.0/1.0  661k: 0.6/14.2  767k: 0.5/15.8  873k: 0.3/26.5  979k: -0.1/0.0
+deter-imagined-s1: first within the limit after 343000 steps
+   131k: 23.5/52.5  237k: 5.7/17.4  343k: 0.3/1.3  449k: 1.2/19.0  555k: 3.2/6.6  661k: 1.6/7.8  767k: 1.9/0.0  873k: 2.7/4.2  979k: 3.9/6.3
+deter-imagined-s2: first within the limit after 343000 steps
+   131k: 13.2/58.6  237k: -1.4/7.0  343k: -1.7/1.6  449k: -0.9/9.9  555k: -0.4/11.9  661k: -0.8/18.0  767k: -0.1/0.0  873k: 0.2/0.0  979k: 0.8/2.7
+deter-real-s0: first within the limit after never steps
+   131k: 2.6/32.4  237k: -0.5/22.0  343k: -3.0/4.5  449k: -3.4/3.6  555k: -2.4/12.8  661k: -2.6/19.6  767k: -2.1/6.6  873k: -2.4/4.7  979k: -0.8/22.1
+deter-real-s1: first within the limit after never steps
+   131k: 26.5/58.1  237k: 1.0/22.5  343k: 0.9/103.7  449k: 4.6/55.9  555k: 4.4/40.4  661k: -3.3/13.1  767k: -3.4/15.5  873k: -2.8/8.8  979k: -2.4/7.1
+deter-real-s2: first within the limit after never steps
+   131k: 24.5/53.8  237k: 19.2/41.4  343k: -3.1/28.3  449k: -7.3/23.4  555k: -3.0/17.9  661k: -2.6/47.9  767k: -2.9/5.9  873k: -2.4/47.9  979k: -3.7/8.7
+gated-imagined-penalty05-s0: first within the limit after never steps
+   131k: 26.2/54.7  237k: 26.8/52.6  343k: 26.7/46.2  449k: 26.8/60.6  555k: 26.7/38.7  661k: 27.0/52.1  767k: 22.4/60.3  873k: 18.0/73.7  979k: 18.5/26.8
+gated-imagined-s0: first within the limit after never steps
+   131k: 27.0/48.0  237k: 26.0/55.5  343k: 19.7/52.7  449k: 7.0/15.5  555k: 8.7/8.9  661k: 8.4/4.1  767k: 5.9/16.0  873k: 5.0/47.9  979k: 5.8/18.0
+hidden-imagined-penalty05-s0: first within the limit after never steps
+   131k: 25.2/52.8  237k: 15.9/25.8  343k: 9.2/10.5  449k: 14.1/18.3  555k: 12.7/26.0  661k: 15.6/27.5  767k: 14.8/16.1  873k: 7.9/18.1  979k: 11.6/12.0
+hidden-imagined-penalty10-s0: first within the limit after 767000 steps
+   131k: 14.8/32.6  237k: 6.8/8.1  343k: 7.5/15.5  449k: 6.1/5.5  555k: 6.2/13.9  661k: 6.0/4.0  767k: 6.3/0.0  873k: 6.8/3.5  979k: 5.5/0.0
+hidden-imagined-s0: first within the limit after 661000 steps
+   131k: 11.5/83.0  237k: 8.8/16.1  343k: 6.8/18.4  449k: 1.6/4.3  555k: 4.6/27.3  661k: 3.4/1.4  767k: 5.4/15.5  873k: 2.2/0.0  979k: 0.6/0.9
+hidden-imagined-s1: first within the limit after 343000 steps
+   131k: 25.3/66.9  237k: 0.3/3.6  343k: 2.4/1.5  449k: 1.8/1.7  555k: 1.2/2.0  661k: 0.1/0.0  767k: -0.8/0.7  873k: 0.5/0.0  979k: 1.4/7.9
+hidden-imagined-s2: first within the limit after 873000 steps
+   131k: 3.2/10.7  237k: 10.0/15.2  343k: 9.6/30.2  449k: -0.2/5.2  555k: 0.2/11.7  661k: 0.2/4.1  767k: 1.7/2.6  873k: -0.6/0.0  979k: 1.0/0.0
+hidden-real-s0: first within the limit after 661000 steps
+   131k: -0.9/6.6  237k: -2.9/31.9  343k: -4.3/7.5  449k: -12.9/4.3  555k: -5.6/14.4  661k: -2.2/1.8  767k: -2.2/0.0  873k: -1.8/3.4  979k: -0.8/2.8
+hidden-real-s1: first within the limit after never steps
+   131k: -3.8/9.3  237k: -4.2/3.9  343k: -0.6/14.6  449k: -1.6/7.2  555k: -2.0/6.4  661k: -2.3/5.8  767k: 2.6/29.1  873k: 2.2/38.5  979k: 0.2/16.7
+hidden-real-s2: first within the limit after never steps
+   131k: -0.2/19.7  237k: -1.8/6.2  343k: -1.7/18.5  449k: -2.9/7.3  555k: -1.2/2.4  661k: -2.1/6.7  767k: -1.6/22.0  873k: -1.5/10.0  979k: -1.0/39.0
+
+World model against simulator: rank agreement between imagined and real scores of the candidates
+that played in the simulator, averaged over generations (1 = same order, 0 = unrelated)
+run                      generations    cost  reward  imagined / real cost of the unadapted agent
+deter-imagined-s0                 36    0.09    0.60                           58.3 / 69.6
+deter-imagined-s1                 36    0.06    0.69                           57.2 / 69.6
+deter-imagined-s2                 36    0.03    0.55                           61.9 / 69.6
+deter-real-s0                     36   -0.07    0.26                          154.5 / 69.6
+deter-real-s1                     36    0.02    0.45                          115.0 / 69.6
+deter-real-s2                     36    0.23    0.57                          175.4 / 69.6
+gated-imagined-penalty05-s0          36   -0.06    0.07                           85.2 / 69.6
+gated-imagined-s0                 36    0.03    0.06                          152.6 / 69.6
+hidden-imagined-penalty05-s0          36    0.21    0.45                           91.0 / 69.6
+hidden-imagined-penalty10-s0          36    0.30    0.52                           89.7 / 69.6
+hidden-imagined-s0                36    0.10    0.64                           70.7 / 69.6
+hidden-imagined-s1                36    0.16    0.62                           55.8 / 69.6
+hidden-imagined-s2                36    0.15    0.68                           56.8 / 69.6
+hidden-real-s0                    36    0.10    0.36                          132.1 / 69.6
+hidden-real-s1                    36   -0.17    0.66                           99.1 / 69.6
+hidden-real-s2                    36   -0.10    0.43                          123.2 / 69.6
+
+Constant part of each kept adapter (the part that does not depend on what it reads), for the two
+action dimensions, and the typical size of the part that does depend on it
+run                             kept after   gain constants  shift constants        reading part: gains, shifts
+deter-imagined-s0              half budget    -0.84    0.22     0.01    0.05      0.22    0.22    0.22    0.23
+deter-imagined-s0              full budget    -0.84    0.22     0.01    0.05      0.22    0.22    0.22    0.23
+deter-imagined-s1              half budget    -1.12    0.00    -0.03   -0.39      0.27    0.26    0.27    0.28
+deter-imagined-s1              full budget    -0.51    1.00     0.38   -0.14      0.90    0.90    0.92    0.90
+deter-imagined-s2              half budget    -1.22   -0.79     0.10   -0.55      0.31    0.34    0.30    0.30
+deter-imagined-s2              full budget    -0.75    1.92     1.03    0.84      1.75    1.73    1.90    1.75
+deter-real-s0                  half budget    -1.35    0.28    -0.97    0.90      0.47    0.48    0.48    0.51
+deter-real-s0                  full budget    -1.35    0.28    -0.97    0.90      0.47    0.48    0.48    0.51
+deter-real-s1                  half budget    -0.20   -0.17     0.81    0.36      0.32    0.34    0.35    0.33
+deter-real-s1                  full budget    -0.97   -0.01     0.95    0.87      0.70    0.75    0.76    0.74
+deter-real-s2                  half budget    -0.60   -0.20     0.80    0.35      0.49    0.44    0.47    0.46
+deter-real-s2                  full budget    -0.54   -0.48     1.05    0.11      0.61    0.57    0.60    0.57
+gated-imagined-penalty05-s0    half budget    -0.11    0.11    -0.19    0.00      0.14    0.27    0.15    0.14
+gated-imagined-penalty05-s0    full budget    -0.28    0.26    -0.14   -0.09      0.24    0.32    0.15    0.22
+gated-imagined-s0              half budget    -3.70   -0.03    -1.08   -0.04      0.42    0.23    0.25    0.27
+gated-imagined-s0              full budget   -12.39    0.12     0.57   -0.26      1.02    0.49    0.49    0.49
+hidden-imagined-penalty05-s0   half budget    -0.03    0.05     0.05   -0.01      0.37    0.17    0.30    0.23
+hidden-imagined-penalty05-s0   full budget     0.08    0.20    -0.17   -0.15      0.59    0.25    0.44    0.32
+hidden-imagined-penalty10-s0   half budget    -0.51    0.08     0.01    0.06      0.27    0.32    0.40    0.17
+hidden-imagined-penalty10-s0   full budget    -0.42    0.10    -0.42   -0.10      0.42    0.40    0.64    0.37
+hidden-imagined-s0             half budget    -0.63   -0.08    -0.10   -0.11      0.26    0.23    0.35    0.17
+hidden-imagined-s0             full budget    -0.52   -0.17    -0.27   -0.16      0.27    0.31    0.61    0.27
+hidden-imagined-s1             half budget    -0.50   -0.11    -0.02   -0.07      0.33    0.19    0.44    0.22
+hidden-imagined-s1             full budget    -0.50   -0.11    -0.02   -0.07      0.33    0.19    0.44    0.22
+hidden-imagined-s2             half budget    -0.53    0.21    -0.02    0.15      0.27    0.20    0.38    0.28
+hidden-imagined-s2             full budget    -0.53   -0.11    -0.31   -0.40      0.31    0.29    0.79    0.37
+hidden-real-s0                 half budget    -0.92    0.25     0.58    0.90      0.47    0.33    0.26    0.35
+hidden-real-s0                 full budget    -1.45    0.55     0.74    1.07      0.44    0.41    0.42    0.41
+hidden-real-s1                 half budget    -0.53    0.02    -0.32    0.08      0.37    0.30    0.24    0.29
+hidden-real-s1                 full budget    -0.53    0.02    -0.32    0.08      0.37    0.30    0.24    0.29
+hidden-real-s2                 half budget    -0.97    0.25     0.07    0.12      0.27    0.27    0.21    0.22
+hidden-real-s2                 full budget    -0.90    0.02     0.25   -0.05      0.37    0.38    0.28    0.30

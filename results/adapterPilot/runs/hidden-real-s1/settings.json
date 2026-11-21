@@ -1,0 +1,25 @@
+{
+ "checkpoint": "/workspace/pilot/checkpoints/20240327-144037_dreamerv3_safetygym_SafetyPointGoal1-v0_0.ckpt",
+ "recordings": [
+  "/workspace/pilot/recordings/chunk0/20240327-144037_dreamerv3_safetygym_SafetyPointGoal1-v0_0"
+ ],
+ "cost_net": "/workspace/pilot/runs/hidden-real-s1/cost_net.npz",
+ "initial_episodes": 25,
+ "reads": "hidden",
+ "scoring": "real",
+ "out": "/workspace/pilot/runs/hidden-real-s1",
+ "seed": 1,
+ "budget": 1000000,
+ "real_candidates": 12,
+ "imagined_candidates": 48,
+ "episodes_per_candidate": 2,
+ "validate_every": 4,
+ "validation_episodes": 10,
+ "first_step_size": 0.2,
+ "task": "safetygym_SafetyPointGoal1-v0",
+ "weights": 68,
+ "cost_limit": 2.0,
+ "unadapted_reward": 26.870732968405935,
+ "unadapted_cost": 69.56,
+ "steps_used_by_cost_net": 25000
+}
