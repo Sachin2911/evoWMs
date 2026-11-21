@@ -8,6 +8,10 @@ Run it inside the image, with /datasets visible:
 
 The variant and task are read from the checkpoint's file name. Any option this script
 does not know is passed on to SafeDreamer's own settings, e.g. --env.safetygym.repeat 4.
+
+With --record FOLDER it also saves every simulator step and the layout of each world, and
+with --video-seeds a video of the chosen episodes; see recording.py. Everything for the
+checkpoint, the results file included, then goes in FOLDER/<checkpoint name>/.
 """
 
 import argparse
@@ -43,6 +47,8 @@ def load_checkpoint(agent, checkpoint_path):
 
     SafeDreamer's own loading does no such check: it would accept a checkpoint from a
     different variant or network size without complaint.
+
+    Returns how many decisions the agent had made in training when the checkpoint was saved.
     """
     import embodied
     import jax
@@ -56,7 +62,9 @@ def load_checkpoint(agent, checkpoint_path):
     expected = shapes()
     checkpoint = embodied.Checkpoint()
     checkpoint.agent = agent
-    checkpoint.load(checkpoint_path, keys=['agent'])
+    training_decisions = embodied.Counter()
+    checkpoint.step = training_decisions
+    checkpoint.load(checkpoint_path, keys=['agent', 'step'])
     loaded = shapes()
     if loaded != expected:
         different = sorted(name for name in expected.keys() | loaded.keys()
@@ -64,6 +72,7 @@ def load_checkpoint(agent, checkpoint_path):
         raise SystemExit(
             f'Checkpoint does not match the settings: {len(different)} of {len(expected)} '
             f'variables differ, e.g. {different[:5]}')
+    return int(training_decisions)
 
 
 def main():
@@ -73,14 +82,29 @@ def main():
     parser.add_argument('--first-seed', type=int, default=0,
                         help='episode k uses seed first-seed + k')
     parser.add_argument('--out', help='results file (default: episodes.jsonl in the run folder)')
+    parser.add_argument('--record', help='folder to record every step in; each checkpoint gets a sub-folder')
+    parser.add_argument('--video-seeds', type=int, nargs='*', default=[],
+                        help='with --record: also save a video of the episodes with these seeds')
     args, safedreamer_options = parser.parse_known_args()
+    if args.video_seeds and not args.record:
+        parser.error('--video-seeds needs --record')
 
     match = NAME_PATTERN.search(args.checkpoint)
     if not match:
         raise SystemExit(f'Cannot read the variant and task from the name of {args.checkpoint}')
-    variant, task, _ = match.groups()
+    variant, task, training_seed = match.groups()
 
-    out_path = pathlib.Path(args.out or os.path.join(os.environ.get('MS_RUN_DIR', '.'), 'episodes.jsonl'))
+    record_folder = None
+    if args.record:
+        from recording import Recorder, make_folder
+        record_folder = pathlib.Path(args.record) / pathlib.Path(args.checkpoint).stem
+        make_folder(record_folder)
+    if args.out:
+        out_path = pathlib.Path(args.out)
+    elif record_folder:
+        out_path = record_folder / 'episodes.jsonl'
+    else:
+        out_path = pathlib.Path(os.environ.get('MS_RUN_DIR', '.')) / 'episodes.jsonl'
     # Episodes already in the results file are not played again, so a restarted job carries on.
     done = len(read_results(out_path))
     if done >= args.episodes:
@@ -106,7 +130,22 @@ def main():
     env = embodied.BatchEnv([safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
 
     agent = agt.Agent(env.obs_space, env.act_space, embodied.Counter(), config)
-    load_checkpoint(agent, args.checkpoint)
+    training_decisions = load_checkpoint(agent, args.checkpoint)
+
+    recorder = None
+    if record_folder:
+        steps_per_decision = config.env.safetygym.repeat
+        recorder = Recorder(simulator, record_folder, steps_per_decision, args.video_seeds)
+        (record_folder / 'run.json').write_text(json.dumps({
+            'checkpoint': pathlib.Path(args.checkpoint).name,
+            'variant': variant,
+            'task': task,
+            'training_seed': int(training_seed),
+            'simulator_steps_per_decision': steps_per_decision,
+            # The checkpoint counts decisions; each one lasts several simulator steps.
+            'training_decisions': training_decisions,
+            'training_simulator_steps': training_decisions * steps_per_decision,
+        }) + '\n')
 
     # Every episode gets its own seed, which fixes both the layout of the world and the
     # agent's random choices. Episode k is then the same whichever checkpoint plays it, and
@@ -120,9 +159,23 @@ def main():
         current['seed'] = next(seeds)
         current['start'] = time.perf_counter()
         agent.rng = np.random.default_rng(current['seed'])
-        return unseeded_reset(seed=current['seed'])
+        result = unseeded_reset(seed=current['seed'])
+        if recorder:
+            recorder.start_episode(current['seed'])
+        return result
 
     simulator.reset = seeded_reset
+
+    if recorder:
+        # The recorder looks at the simulator after each of its steps, hooked in the same way.
+        unrecorded_step = simulator.step
+
+        def recorded_step(action):
+            result = unrecorded_step(action)
+            recorder.after_step(action, result)
+            return result
+
+        simulator.step = recorded_step
 
     def record(episode, _worker):
         result = {
@@ -136,6 +189,9 @@ def main():
             'decisions': len(episode['reward']) - 1,
             'seconds': round(time.perf_counter() - current['start'], 1),
         }
+        if recorder:
+            # Before the results line, so an episode counted as done always has its recording.
+            recorder.finish_episode(episode)
         with out_path.open('a') as file:
             file.write(json.dumps(result) + '\n')
         print(result, flush=True)
