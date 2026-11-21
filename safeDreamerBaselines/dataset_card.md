@@ -61,10 +61,13 @@ is 2. "Trained for" is read from the checkpoint itself.
   ranges from 0 to several hundred. Use many episodes for any comparison.
 - **An episode does not always replay exactly.** Every episode was run twice, in separate jobs,
   and {REPLAYED} episodes gave the identical reward and cost both times. The `replayed_exactly`
-  column marks them. The rest differ because a camera image is occasionally not bit-identical
-  between two runs, and over a long episode a tiny difference can grow. On other hardware
-  expect the same seed to play out differently more often. Averages should agree; single
-  episodes may not.
+  column marks them. How often depends on the task and the agent: on PointButton1 every episode
+  replayed, while on PointPush1 the two planning agents almost never did. The count for each
+  checkpoint is in `checkpoints`. For the reward-only agent the differences were traced to
+  camera images that are occasionally not bit-identical between two runs; over a long episode
+  a tiny difference can grow. Other causes have not been ruled out for the planning agents. On
+  other hardware expect the same seed to play out differently more often. Averages should
+  agree; single episodes may not.
 
 ## Files
 
@@ -162,8 +165,7 @@ reward and cost.
 - **Repeatability:** run on NVIDIA RTX 3060 GPUs with CUDA 11.8, with the simulator's cameras
   rendered on the GPU. With the default settings JAX picks GPU routines by timing them at
   start-up, and the same seed then gave different episodes depending on which routine won, so
-  `--xla_gpu_autotune_level=0` is set. What remains is the occasional camera image that differs
-  between runs, described above.
+  `--xla_gpu_autotune_level=0` is set. What remains is described above.
 - **Training length:** the paper's figures show the simulator steps as the checkpoint's step
   counter times the action repeat, and `training_simulator_steps` follows the same rule.
 
