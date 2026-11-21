@@ -13,6 +13,9 @@ What the adapter reads is one of:
 
   hidden  the 16 hidden units of the small cost network (cost_features.py)
   deter   the 512 numbers themselves, each scaled to a similar range
+  gated   the 16 hidden units again, but gain and shift are multiplied by the cost network's
+          chance of a cost within the next 5 decisions. The adapter then has little say while
+          no cost is in sight, and cannot make the agent safe by simply holding it still.
 
 Every function takes `xp`, which is numpy when playing in the simulator and jax.numpy when
 scoring candidates inside the world model, so both use the same arithmetic.
@@ -20,11 +23,11 @@ scoring candidates inside the world model, so both use the same arithmetic.
 
 import numpy as np
 
-KINDS = ('hidden', 'deter')
+KINDS = ('hidden', 'deter', 'gated')
 
 
 def count_features(net, kind):
-    return net['w1'].shape[1] if kind == 'hidden' else net['w1'].shape[0]
+    return net['w1'].shape[0] if kind == 'deter' else net['w1'].shape[1]
 
 
 def count_weights(net, kind, action_size):
@@ -46,17 +49,18 @@ def cost_logits(net, deter, xp):
     return hidden(net, deter, xp) @ net['w2'] + net['b2']
 
 
-def features(net, deter, kind, xp):
-    return hidden(net, deter, xp) if kind == 'hidden' else scaled(net, deter, xp)
-
-
-def adapt(weights, feats, action, xp):
-    """The adapter's action. weights: flat; feats: (..., features); action: (..., action_size)."""
+def adapt(weights, net, kind, deter, action, xp):
+    """The adapter's action. weights: flat; deter: (..., 512); action: (..., action_size)."""
+    feats = scaled(net, deter, xp) if kind == 'deter' else hidden(net, deter, xp)
     count, size = feats.shape[-1], action.shape[-1]
     # Divided by the square root of the number of features, so a random change to the weights
     # moves the action by a similar amount whether the adapter reads 16 numbers or 512.
     matrix = weights[:count * 2 * size].reshape(count, 2 * size) / np.sqrt(count)
     out = feats @ matrix + weights[count * 2 * size:]
+    if kind == 'gated':
+        # Column 1 of the cost network answers "a cost within the next 5 decisions?".
+        ahead = feats @ net['w2'][:, 1] + net['b2'][1]
+        out = out * (1 / (1 + xp.exp(-ahead)))[..., None]
     return action * (1 + out[..., :size]) + out[..., size:]
 
 
@@ -71,7 +75,7 @@ def adapted_policy(agent, net, kind, get_weights, on_decision=None):
         (latent, action), task_state, exploration_state = state
         if on_decision:
             on_decision(latent)
-        adapted = adapt(get_weights(), features(net, latent['deter'], kind, np), action, np).astype(action.dtype)
+        adapted = adapt(get_weights(), net, kind, latent['deter'], action, np).astype(action.dtype)
         # The world model is told the action that was really taken, not the one first proposed.
         return {**actions, 'action': adapted}, ((latent, adapted), task_state, exploration_state)
     return policy

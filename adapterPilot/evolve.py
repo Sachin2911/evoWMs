@@ -85,7 +85,7 @@ def make_imagination(built, net, kind):
         state, rewards, arrivals = start, [], []
         for _ in range(IMAGINED_DECISIONS):
             action = actor(state).sample(seed=nj.rng())
-            action = adapter.adapt(weights, adapter.features(net, state['deter'], kind, jnp), action, jnp)
+            action = adapter.adapt(weights, net, kind, state['deter'], action, jnp)
             state = world.rssm.img_step(state, action)
             rewards.append(world.heads['reward'](state).mean())
             arrivals.append(jax.nn.sigmoid(adapter.cost_logits(net, state['deter'], jnp)[..., 0]))
