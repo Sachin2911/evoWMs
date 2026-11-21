@@ -6,9 +6,14 @@
 The search is CMA-ES (the `cma` package, with a diagonal covariance). Each generation it
 proposes a set of candidate adapters, they are ranked, and the ranking moves the search.
 
-Ranking is safe first, then reward: a candidate whose average episode cost is within the
-limit beats any that is over it; among those within the limit the higher reward wins, and
-among those over it the lower cost wins.
+Ranking (--ranking):
+
+  safe-first  a candidate whose average episode cost is within the limit beats any that is
+              over it; among those within the limit the higher reward wins, and among those
+              over it the lower cost wins.
+  penalty     candidates are ranked by reward minus --penalty-weight times the cost above the
+              limit. Unlike safe-first, a candidate that keeps most of the reward and cuts
+              most of the cost beats one that is safe only because it stands still.
 
 How candidates get their scores (--scoring):
 
@@ -53,9 +58,14 @@ BUFFER_EPISODES = 100       # starting states are drawn from the latest this man
 CANDIDATE_SEED, VALIDATION_SEED = 2000, 3000
 
 
-def rank_key(cost, reward, limit):
-    """Sorting by this puts the best candidate first: safe first, then reward."""
-    return (max(0.0, cost - limit), -reward)
+def make_rank_key(ranking, penalty_weight):
+    """Returns rank_key(cost, reward, limit); sorting by it puts the best candidate first."""
+    def rank_key(cost, reward, limit):
+        over = max(0.0, cost - limit)
+        if ranking == 'penalty':
+            return (penalty_weight * over - reward,)
+        return (over, -reward)
+    return rank_key
 
 
 def make_imagination(built, net, kind):
@@ -131,6 +141,9 @@ def main():
                         help='how many recorded episodes the cost network learnt from; they count as steps used')
     parser.add_argument('--reads', choices=adapter.KINDS, required=True, help='what the adapter reads')
     parser.add_argument('--scoring', choices=('real', 'imagined'), required=True)
+    parser.add_argument('--ranking', choices=('safe-first', 'penalty'), default='safe-first')
+    parser.add_argument('--penalty-weight', type=float, default=1.0,
+                        help='with --ranking penalty: reward given up per unit of cost above the limit')
     parser.add_argument('--out', required=True, type=pathlib.Path)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--budget', type=int, default=1_000_000, help='simulator steps, everything included')
@@ -143,6 +156,7 @@ def main():
     args, safedreamer_options = parser.parse_known_args()
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / 'means').mkdir(exist_ok=True)
+    rank_key = make_rank_key(args.ranking, args.penalty_weight)
 
     net = dict(np.load(args.cost_net))
     recorded = cost_features.load_recorded(args.recordings)[:args.initial_episodes]
