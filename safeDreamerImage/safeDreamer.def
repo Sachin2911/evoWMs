@@ -27,7 +27,9 @@ Stage: final
     # /usr/lib/x86_64-linux-gnu comes first so the image's own graphics libraries are used.
     # `--nv` also brings in the node's copies, which are built for a newer Ubuntu and fail here.
     export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/local/cuda-11.8/lib64:/usr/local/cuda-11.8/extras/CUPTI/lib64:${LD_LIBRARY_PATH:-}
-    export XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda-11.8
+    # autotune_level=0 stops JAX timing several GPU methods at start-up and keeping the fastest.
+    # The winner varied from run to run, and with it the results; now the same seed replays exactly.
+    export XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda-11.8 --xla_gpu_autotune_level=0"
 
 %labels
     base.image ghcr.io/sachin2911/safedreamer-base:49c775ea1061a25f3ec4e65c2924ca0f8da46419
