@@ -3,6 +3,7 @@
 For every episode it saves one row per simulator step (the action, the reward, the cost and
 what caused it, where the robot and the goal are) and where every object started. For chosen
 episodes it also saves a video: a view from above, next to the two camera images the agent sees.
+It can also save the world model's internal state at every decision.
 
 Recording only reads from the simulator, so a recorded episode plays out exactly like an
 unrecorded one.
@@ -56,6 +57,7 @@ class Recorder:
         self.filming = seed in self.video_seeds
         self.rows = []
         self.frames = []
+        self.states = []
         self.layout = {'seed': seed, 'agent': self._agent()[:3], 'objects': self._objects()}
 
     def after_step(self, action, result):
@@ -77,6 +79,17 @@ class Recorder:
         if self.filming and len(self.rows) % VIDEO_EVERY == 0:
             self.frames.append(self._view_from_above())
 
+    def after_decision(self, state):
+        """Call after each of the agent's decisions, with the state its policy returned.
+
+        The state holds the world model's summary of everything seen so far, which is what the
+        actor reads to pick an action. It has two parts: 512 numbers ("deter"), and 48 choices
+        each among 48 options ("stoch"), which we store as the 48 chosen option numbers.
+        """
+        latent = state[0][0]
+        self.states.append((np.asarray(latent['deter'][0], np.float16),
+                            np.asarray(latent['stoch'][0]).argmax(-1).astype(np.uint8)))
+
     def finish_episode(self, episode):
         """Call at the end of the episode, with everything the agent saw. Writes the files."""
         rows = self.rows
@@ -95,6 +108,14 @@ class Recorder:
         for name in cost_names:
             arrays[name] = np.array([row['costs'].get(name, 0.0) for row in rows], np.float32)
         np.savez_compressed(self.folder / 'steps' / f'seed_{self.seed:04d}.npz', **arrays)
+
+        if self.states:
+            # One row per observation: the state after seeing it, before acting on it.
+            make_folder(self.folder / 'latents')
+            np.savez_compressed(
+                self.folder / 'latents' / f'seed_{self.seed:04d}.npz',
+                deter=np.array([deter for deter, _ in self.states]),
+                stoch=np.array([stoch for _, stoch in self.states]))
 
         if self.filming:
             write_video(

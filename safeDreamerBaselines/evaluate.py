@@ -11,7 +11,8 @@ does not know is passed on to SafeDreamer's own settings, e.g. --env.safetygym.r
 
 With --record FOLDER it also saves every simulator step and the layout of each world, and
 with --video-seeds a video of the chosen episodes; see recording.py. Everything for the
-checkpoint, the results file included, then goes in FOLDER/<checkpoint name>/.
+checkpoint, the results file included, then goes in FOLDER/<checkpoint name>/. With
+--record-latents it also saves the world model's internal state at every decision.
 """
 
 import argparse
@@ -85,9 +86,11 @@ def main():
     parser.add_argument('--record', help='folder to record every step in; each checkpoint gets a sub-folder')
     parser.add_argument('--video-seeds', type=int, nargs='*', default=[],
                         help='with --record: also save a video of the episodes with these seeds')
+    parser.add_argument('--record-latents', action='store_true',
+                        help="with --record: also save the world model's internal state at every decision")
     args, safedreamer_options = parser.parse_known_args()
-    if args.video_seeds and not args.record:
-        parser.error('--video-seeds needs --record')
+    if (args.video_seeds or args.record_latents) and not args.record:
+        parser.error('--video-seeds and --record-latents need --record')
 
     match = NAME_PATTERN.search(args.checkpoint)
     if not match:
@@ -199,8 +202,14 @@ def main():
     driver = embodied.Driver(env)
     driver.on_episode(record)
     penalty = safedreamer_train.PIDLagrangian(config).lagrange_penalty
-    driver(lambda *inputs: agent.policy(*inputs, mode='eval'),
-           episodes=args.episodes - done, lag=penalty)
+
+    def policy(*inputs):
+        actions, state = agent.policy(*inputs, mode='eval')
+        if args.record_latents:
+            recorder.after_decision(state)
+        return actions, state
+
+    driver(policy, episodes=args.episodes - done, lag=penalty)
 
     results = read_results(out_path)
     rewards = np.array([r['reward'] for r in results])
