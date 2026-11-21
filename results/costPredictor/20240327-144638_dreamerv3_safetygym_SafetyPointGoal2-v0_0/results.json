@@ -1,0 +1,692 @@
+{
+ "checkpoint": "20240327-144638_dreamerv3_safetygym_SafetyPointGoal2-v0_0.ckpt",
+ "task": "safetygym_SafetyPointGoal2-v0",
+ "variant": "dreamerv3",
+ "episodes": 200,
+ "episode_seeds": [
+  1000,
+  1199
+ ],
+ "simulator_steps_per_decision": 2,
+ "simulator_steps_used": 200000,
+ "episodes_in": {
+  "train": 120,
+  "validation": 30,
+  "test": 50
+ },
+ "decisions_with_cost": 0.19419,
+ "horizons": {
+  "1": {
+   "share_followed_by_cost": 0.20036,
+   "share_followed_by_cost_when_calm": 0.016747487876818477,
+   "test_decisions": 25000,
+   "test_decisions_calm": 20003,
+   "predictors": {
+    "latent": {
+     "linear": {
+      "auroc": 0.9844115118323509,
+      "auroc_range": [
+       0.9821354327981452,
+       0.987499382534207
+      ],
+      "average_precision": 0.9531510478147203,
+      "auroc_when_calm": 0.9824721723900327,
+      "auroc_when_calm_range": [
+       0.9793725538405369,
+       0.9854621213110982
+      ],
+      "average_precision_when_calm": 0.545294044580718,
+      "best_epoch": 28
+     },
+     "network": {
+      "auroc": 0.9883284071962948,
+      "auroc_range": [
+       0.9857856077724783,
+       0.9904577012230368
+      ],
+      "average_precision": 0.9618319637122171,
+      "auroc_when_calm": 0.9814656127538027,
+      "auroc_when_calm_range": [
+       0.9777779433997235,
+       0.9848348791354923
+      ],
+      "average_precision_when_calm": 0.5099590086406808,
+      "best_epoch": 16
+     }
+    },
+    "deter": {
+     "linear": {
+      "auroc": 0.9852434693635693,
+      "auroc_range": [
+       0.9822689735017087,
+       0.9879884017146012
+      ],
+      "average_precision": 0.9542084746269511,
+      "auroc_when_calm": 0.9836896967268599,
+      "auroc_when_calm_range": [
+       0.97995199822524,
+       0.9864025766160052
+      ],
+      "average_precision_when_calm": 0.5331329143087395,
+      "best_epoch": 28
+     },
+     "network": {
+      "auroc": 0.9917070487668742,
+      "auroc_range": [
+       0.9895909023957326,
+       0.9935169804605395
+      ],
+      "average_precision": 0.9711201630641825,
+      "auroc_when_calm": 0.9866252933016431,
+      "auroc_when_calm_range": [
+       0.9837492990771783,
+       0.9890715585308921
+      ],
+      "average_precision_when_calm": 0.5716290979762425,
+      "best_epoch": 29
+     }
+    },
+    "stoch": {
+     "linear": {
+      "auroc": 0.8518740899965176,
+      "auroc_range": [
+       0.8377383003769727,
+       0.8649259728307787
+      ],
+      "average_precision": 0.6220784602807616,
+      "auroc_when_calm": 0.8081438445357108,
+      "auroc_when_calm_range": [
+       0.7838632578014889,
+       0.8320825072856821
+      ],
+      "average_precision_when_calm": 0.09827613922986271,
+      "best_epoch": 5
+     },
+     "network": {
+      "auroc": 0.849384588806628,
+      "auroc_range": [
+       0.8346657527385897,
+       0.8630327746089278
+      ],
+      "average_precision": 0.613445274362505,
+      "auroc_when_calm": 0.7972972234617031,
+      "auroc_when_calm_range": [
+       0.7779161892752791,
+       0.8151333900598895
+      ],
+      "average_precision_when_calm": 0.09240766785635457,
+      "best_epoch": 5
+     }
+    },
+    "privileged": {
+     "linear": {
+      "auroc": 0.87647633689103,
+      "auroc_range": [
+       0.8640319106031493,
+       0.8929151575543799
+      ],
+      "average_precision": 0.6892963836419439,
+      "auroc_when_calm": 0.8556464170908726,
+      "auroc_when_calm_range": [
+       0.8284052424299393,
+       0.881378628940949
+      ],
+      "average_precision_when_calm": 0.1766790336498181,
+      "best_epoch": 30
+     },
+     "network": {
+      "auroc": 0.9485953446469558,
+      "auroc_range": [
+       0.9387345323526237,
+       0.9562523565399197
+      ],
+      "average_precision": 0.8378409135633362,
+      "auroc_when_calm": 0.9191484614754173,
+      "auroc_when_calm_range": [
+       0.9032700889593387,
+       0.9344832331857152
+      ],
+      "average_precision_when_calm": 0.2663614887718944,
+      "best_epoch": 30
+     }
+    },
+    "shuffled": {
+     "linear": {
+      "auroc": 0.4950903340721732,
+      "auroc_range": [
+       0.47989454958451466,
+       0.5114206252660582
+      ],
+      "average_precision": 0.20455775647999427,
+      "auroc_when_calm": 0.47576850342552035,
+      "auroc_when_calm_range": [
+       0.45333169243697424,
+       0.49761334339858765
+      ],
+      "average_precision_when_calm": 0.01620454861853486,
+      "best_epoch": 5
+     },
+     "network": {
+      "auroc": 0.47274760366061713,
+      "auroc_range": [
+       0.461474398279331,
+       0.48798907727254687
+      ],
+      "average_precision": 0.18950272455254666,
+      "auroc_when_calm": 0.47737274578905353,
+      "auroc_when_calm_range": [
+       0.4528865072954839,
+       0.5009337132200979
+      ],
+      "average_precision_when_calm": 0.01530581508710205,
+      "best_epoch": 12
+     }
+    }
+   }
+  },
+  "5": {
+   "share_followed_by_cost": 0.2521774193548387,
+   "share_followed_by_cost_when_calm": 0.08068496600352557,
+   "test_decisions": 24800,
+   "test_decisions_calm": 19855,
+   "predictors": {
+    "latent": {
+     "linear": {
+      "auroc": 0.9790862975270506,
+      "auroc_range": [
+       0.9751517508132164,
+       0.9825253861807717
+      ],
+      "average_precision": 0.9498787404672737,
+      "auroc_when_calm": 0.9637314078926571,
+      "auroc_when_calm_range": [
+       0.9575767034428677,
+       0.9695359376523907
+      ],
+      "average_precision_when_calm": 0.7441565682683291,
+      "best_epoch": 28
+     },
+     "network": {
+      "auroc": 0.9847106241954464,
+      "auroc_range": [
+       0.9822653905528257,
+       0.9873579985838873
+      ],
+      "average_precision": 0.9618476720393935,
+      "auroc_when_calm": 0.9763624100784007,
+      "auroc_when_calm_range": [
+       0.9711910871801193,
+       0.9804095426968223
+      ],
+      "average_precision_when_calm": 0.8228424292076488,
+      "best_epoch": 20
+     }
+    },
+    "deter": {
+     "linear": {
+      "auroc": 0.9804241407573994,
+      "auroc_range": [
+       0.9771770726991497,
+       0.9839974141431503
+      ],
+      "average_precision": 0.9515201200405753,
+      "auroc_when_calm": 0.9666183172529982,
+      "auroc_when_calm_range": [
+       0.96073386100859,
+       0.9723065250882802
+      ],
+      "average_precision_when_calm": 0.7489232634969794,
+      "best_epoch": 28
+     },
+     "network": {
+      "auroc": 0.988599307658455,
+      "auroc_range": [
+       0.9863108258514524,
+       0.991252727184374
+      ],
+      "average_precision": 0.9696859948957962,
+      "auroc_when_calm": 0.984384589388723,
+      "auroc_when_calm_range": [
+       0.9805270155373956,
+       0.9873040916678767
+      ],
+      "average_precision_when_calm": 0.8638980305798752,
+      "best_epoch": 30
+     }
+    },
+    "stoch": {
+     "linear": {
+      "auroc": 0.839149117324537,
+      "auroc_range": [
+       0.8230916359979322,
+       0.8536989335560016
+      ],
+      "average_precision": 0.6601234021321567,
+      "auroc_when_calm": 0.7777540613268095,
+      "auroc_when_calm_range": [
+       0.7575480439289042,
+       0.7959211882175022
+      ],
+      "average_precision_when_calm": 0.2502942444133667,
+      "best_epoch": 8
+     },
+     "network": {
+      "auroc": 0.8353215098381466,
+      "auroc_range": [
+       0.8200071959305,
+       0.8495116425421522
+      ],
+      "average_precision": 0.6590977004029497,
+      "auroc_when_calm": 0.7695555561027267,
+      "auroc_when_calm_range": [
+       0.7527352088403444,
+       0.786460833183595
+      ],
+      "average_precision_when_calm": 0.24956525414451117,
+      "best_epoch": 9
+     }
+    },
+    "privileged": {
+     "linear": {
+      "auroc": 0.8742282303716865,
+      "auroc_range": [
+       0.8589327777171988,
+       0.888199864544341
+      ],
+      "average_precision": 0.7447735697647032,
+      "auroc_when_calm": 0.8661231307520944,
+      "auroc_when_calm_range": [
+       0.8419895810885681,
+       0.8930293373375232
+      ],
+      "average_precision_when_calm": 0.4570776709701977,
+      "best_epoch": 30
+     },
+     "network": {
+      "auroc": 0.9438023894191164,
+      "auroc_range": [
+       0.934363961681705,
+       0.9524121437403974
+      ],
+      "average_precision": 0.853930824760608,
+      "auroc_when_calm": 0.9224043720892631,
+      "auroc_when_calm_range": [
+       0.9115328174532233,
+       0.9351192143666789
+      ],
+      "average_precision_when_calm": 0.5384411104734628,
+      "best_epoch": 30
+     }
+    },
+    "shuffled": {
+     "linear": {
+      "auroc": 0.5239871630436473,
+      "auroc_range": [
+       0.5107082625146615,
+       0.5447789124952956
+      ],
+      "average_precision": 0.26195837485117884,
+      "auroc_when_calm": 0.524043539642176,
+      "auroc_when_calm_range": [
+       0.5039797012078068,
+       0.5489975291637725
+      ],
+      "average_precision_when_calm": 0.08499266528251755,
+      "best_epoch": 1
+     },
+     "network": {
+      "auroc": 0.525826167252096,
+      "auroc_range": [
+       0.509323518075983,
+       0.5424010708488833
+      ],
+      "average_precision": 0.2769578477393867,
+      "auroc_when_calm": 0.4944114329230028,
+      "auroc_when_calm_range": [
+       0.47446323968735143,
+       0.5122709074569851
+      ],
+      "average_precision_when_calm": 0.08163331788798342,
+      "best_epoch": 1
+     }
+    }
+   }
+  },
+  "15": {
+   "share_followed_by_cost": 0.36893004115226335,
+   "share_followed_by_cost_when_calm": 0.22435238486842105,
+   "test_decisions": 24300,
+   "test_decisions_calm": 19456,
+   "predictors": {
+    "latent": {
+     "linear": {
+      "auroc": 0.9348026988264145,
+      "auroc_range": [
+       0.9256523777421499,
+       0.9422459723566581
+      ],
+      "average_precision": 0.9090798874772107,
+      "auroc_when_calm": 0.8978247884939045,
+      "auroc_when_calm_range": [
+       0.8823644993442207,
+       0.9094612067466435
+      ],
+      "average_precision_when_calm": 0.7529644223211969,
+      "best_epoch": 29
+     },
+     "network": {
+      "auroc": 0.948370286141574,
+      "auroc_range": [
+       0.9400182381869899,
+       0.95521317420166
+      ],
+      "average_precision": 0.9279380565290855,
+      "auroc_when_calm": 0.9228458766719777,
+      "auroc_when_calm_range": [
+       0.9103907665380296,
+       0.9319943416222484
+      ],
+      "average_precision_when_calm": 0.8154870652893264,
+      "best_epoch": 24
+     }
+    },
+    "deter": {
+     "linear": {
+      "auroc": 0.9388570630523259,
+      "auroc_range": [
+       0.9303210147168568,
+       0.9466184251232328
+      ],
+      "average_precision": 0.9137080416265649,
+      "auroc_when_calm": 0.9047399195548533,
+      "auroc_when_calm_range": [
+       0.8918078352238681,
+       0.916133325581461
+      ],
+      "average_precision_when_calm": 0.7643214384268623,
+      "best_epoch": 30
+     },
+     "network": {
+      "auroc": 0.9624258560125227,
+      "auroc_range": [
+       0.9543049115477089,
+       0.9688638962145987
+      ],
+      "average_precision": 0.9458140173494537,
+      "auroc_when_calm": 0.9434951291678897,
+      "auroc_when_calm_range": [
+       0.9339454056800823,
+       0.9522226865804263
+      ],
+      "average_precision_when_calm": 0.8577204652325306,
+      "best_epoch": 29
+     }
+    },
+    "stoch": {
+     "linear": {
+      "auroc": 0.7950225481080556,
+      "auroc_range": [
+       0.7782792525311186,
+       0.8124282057787819
+      ],
+      "average_precision": 0.6991985734553149,
+      "auroc_when_calm": 0.7440623106418996,
+      "auroc_when_calm_range": [
+       0.7252678491037867,
+       0.7633834495513823
+      ],
+      "average_precision_when_calm": 0.44606512991607716,
+      "best_epoch": 6
+     },
+     "network": {
+      "auroc": 0.7941066943122468,
+      "auroc_range": [
+       0.77688405630797,
+       0.8085727790847668
+      ],
+      "average_precision": 0.6978323099350076,
+      "auroc_when_calm": 0.7433508498234043,
+      "auroc_when_calm_range": [
+       0.7288970621440802,
+       0.7595646600626312
+      ],
+      "average_precision_when_calm": 0.44667264042982213,
+      "best_epoch": 3
+     }
+    },
+    "privileged": {
+     "linear": {
+      "auroc": 0.842261764631539,
+      "auroc_range": [
+       0.8211616419003389,
+       0.8600775462923159
+      ],
+      "average_precision": 0.7809896433940172,
+      "auroc_when_calm": 0.8150066685931239,
+      "auroc_when_calm_range": [
+       0.7898971651841626,
+       0.8337288488717491
+      ],
+      "average_precision_when_calm": 0.604114697371858,
+      "best_epoch": 30
+     },
+     "network": {
+      "auroc": 0.8858371659085772,
+      "auroc_range": [
+       0.8739261086860955,
+       0.8999878003183832
+      ],
+      "average_precision": 0.8264224975894643,
+      "auroc_when_calm": 0.8442641635779213,
+      "auroc_when_calm_range": [
+       0.828206407406658,
+       0.8601183285500946
+      ],
+      "average_precision_when_calm": 0.6310719602855814,
+      "best_epoch": 30
+     }
+    },
+    "shuffled": {
+     "linear": {
+      "auroc": 0.5013775085554427,
+      "auroc_range": [
+       0.487352225092762,
+       0.5163007863769641
+      ],
+      "average_precision": 0.37402221477704006,
+      "auroc_when_calm": 0.505787128913154,
+      "auroc_when_calm_range": [
+       0.48821617375531223,
+       0.5233352746451115
+      ],
+      "average_precision_when_calm": 0.2275413530413375,
+      "best_epoch": 26
+     },
+     "network": {
+      "auroc": 0.49810391496401885,
+      "auroc_range": [
+       0.4870602229768429,
+       0.5069870216489956
+      ],
+      "average_precision": 0.3724331228476778,
+      "auroc_when_calm": 0.5072217398488877,
+      "auroc_when_calm_range": [
+       0.49520075307486056,
+       0.519582078390494
+      ],
+      "average_precision_when_calm": 0.229490496571095,
+      "best_epoch": 26
+     }
+    }
+   }
+  },
+  "25": {
+   "share_followed_by_cost": 0.4703781512605042,
+   "share_followed_by_cost_when_calm": 0.3497588592996435,
+   "test_decisions": 23800,
+   "test_decisions_calm": 19076,
+   "predictors": {
+    "latent": {
+     "linear": {
+      "auroc": 0.8819145333729942,
+      "auroc_range": [
+       0.8669318301778395,
+       0.8956695258757192
+      ],
+      "average_precision": 0.8852821158995708,
+      "auroc_when_calm": 0.8297695183904472,
+      "auroc_when_calm_range": [
+       0.8132222416229542,
+       0.8457321823729526
+      ],
+      "average_precision_when_calm": 0.7478642753283329,
+      "best_epoch": 29
+     },
+     "network": {
+      "auroc": 0.894576558250579,
+      "auroc_range": [
+       0.8819027748837746,
+       0.9081355990519784
+      ],
+      "average_precision": 0.8974687417826517,
+      "auroc_when_calm": 0.8497447265502658,
+      "auroc_when_calm_range": [
+       0.8338144598510319,
+       0.8640555962177282
+      ],
+      "average_precision_when_calm": 0.7775477610972432,
+      "best_epoch": 19
+     }
+    },
+    "deter": {
+     "linear": {
+      "auroc": 0.8894507680813901,
+      "auroc_range": [
+       0.876677486530305,
+       0.9025923500685147
+      ],
+      "average_precision": 0.8924421101130563,
+      "auroc_when_calm": 0.8398018967927883,
+      "auroc_when_calm_range": [
+       0.8259416639140631,
+       0.8561245293142691
+      ],
+      "average_precision_when_calm": 0.7612167427725094,
+      "best_epoch": 29
+     },
+     "network": {
+      "auroc": 0.9147472512715432,
+      "auroc_range": [
+       0.9026698757489722,
+       0.9258533872484771
+      ],
+      "average_precision": 0.9163799436811948,
+      "auroc_when_calm": 0.8780937963270145,
+      "auroc_when_calm_range": [
+       0.8609930672778939,
+       0.8928326126913357
+      ],
+      "average_precision_when_calm": 0.8162516954770627,
+      "best_epoch": 27
+     }
+    },
+    "stoch": {
+     "linear": {
+      "auroc": 0.7472556474696959,
+      "auroc_range": [
+       0.7278034346749382,
+       0.7655359688121042
+      ],
+      "average_precision": 0.7288930946343841,
+      "auroc_when_calm": 0.6958308514426769,
+      "auroc_when_calm_range": [
+       0.67604367707621,
+       0.7172946849550108
+      ],
+      "average_precision_when_calm": 0.5450810132275764,
+      "best_epoch": 7
+     },
+     "network": {
+      "auroc": 0.7473545186046854,
+      "auroc_range": [
+       0.7274838339465142,
+       0.7649199239140214
+      ],
+      "average_precision": 0.7288721682505377,
+      "auroc_when_calm": 0.6963101378780884,
+      "auroc_when_calm_range": [
+       0.6770197559284955,
+       0.715427934698838
+      ],
+      "average_precision_when_calm": 0.5464804424637152,
+      "best_epoch": 3
+     }
+    },
+    "privileged": {
+     "linear": {
+      "auroc": 0.7975781532491962,
+      "auroc_range": [
+       0.7764199118760279,
+       0.8186609877730996
+      ],
+      "average_precision": 0.789463990508862,
+      "auroc_when_calm": 0.7598210068675147,
+      "auroc_when_calm_range": [
+       0.7310187417654989,
+       0.7815523346664571
+      ],
+      "average_precision_when_calm": 0.6491620473880624,
+      "best_epoch": 30
+     },
+     "network": {
+      "auroc": 0.8264133330049912,
+      "auroc_range": [
+       0.8071043080103224,
+       0.8480398712192497
+      ],
+      "average_precision": 0.8167385169693828,
+      "auroc_when_calm": 0.776500792271697,
+      "auroc_when_calm_range": [
+       0.7562571284907348,
+       0.7950767101928985
+      ],
+      "average_precision_when_calm": 0.6656453796190428,
+      "best_epoch": 30
+     }
+    },
+    "shuffled": {
+     "linear": {
+      "auroc": 0.516791960484144,
+      "auroc_range": [
+       0.5010606042943827,
+       0.5321621964344566
+      ],
+      "average_precision": 0.49018513741560626,
+      "auroc_when_calm": 0.5061625743745539,
+      "auroc_when_calm_range": [
+       0.48925878107855825,
+       0.5213123126317152
+      ],
+      "average_precision_when_calm": 0.3594686896443692,
+      "best_epoch": 3
+     },
+     "network": {
+      "auroc": 0.47088293262898046,
+      "auroc_range": [
+       0.46239188616955507,
+       0.48220780359820087
+      ],
+      "average_precision": 0.45191234232897426,
+      "auroc_when_calm": 0.4861711747177556,
+      "auroc_when_calm_range": [
+       0.47385949115432296,
+       0.49763296719845657
+      ],
+      "average_precision_when_calm": 0.34329601670212784,
+      "best_epoch": 13
+     }
+    }
+   }
+  }
+ }
+}
