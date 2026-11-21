@@ -31,9 +31,16 @@ export MUJOCO_GL=egl                         # cameras rendered on the GPU, as i
 
 mkdir -p "$WORK/logs" "$CKPT"
 if [ "$1" != setup ] && [ "$1" != unpack ] && [ -z "${REPO_FIXED:-}" ]; then
+    # Several commands may start at once on a machine; they take turns here, and code that is
+    # already at the right commit is left alone while others are running from it.
+    exec 9> "$WORK/checkout.lock"
+    flock 9
     [ -d "$REPO" ] || git clone -q https://github.com/Sachin2911/evoWMs.git "$REPO"
-    git -C "$REPO" fetch -q origin
-    git -C "$REPO" checkout -q "$COMMIT"
+    if [ "$(git -C "$REPO" rev-parse HEAD)" != "$(git -C "$REPO" rev-parse --verify -q "$COMMIT^{commit}")" ]; then
+        git -C "$REPO" fetch -q origin
+        git -C "$REPO" checkout -q "$COMMIT"
+    fi
+    flock -u 9
 fi
 
 case "$1" in
