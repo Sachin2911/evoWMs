@@ -23,9 +23,9 @@ charged within twice as many.
               to be about zero away from cost, so that the adapter does nothing there.
     way out   over the decisions that are not charged and where holding the proposed action
               is expected to cost half a unit or more: how often some push at least halves
-              that, which push lowers it most, and what each push does to cost and reward.
-              Whether a push that looks good to the model is good in the simulator is not
-              tested here.
+              that, how often no push lowers it by even a tenth, and for each push how
+              often it halves it and the reward it gives up when it does. Whether a push
+              that looks good to the model is good in the simulator is not tested here.
     sizes     the mean and spread of each of the numbers, which an adapter needs to put
               them on one scale.
     time      milliseconds for one state, as when playing.
@@ -150,7 +150,9 @@ def main():
         loudest = np.abs(cost_changes).max(1)
         near, far = free & costly, free & away
         expecting = free & (held_cost >= 0.5)
-        best = cost_changes[expecting].argmin(1)
+        # For each of those decisions and each push: does the push at least halve the expected cost?
+        halves = cost_changes[expecting] <= -0.5 * held_cost[expecting][:, None]
+        lowest = cost_changes[expecting].min(1)
         report[decisions] = {
             'danger': {
                 'look-ahead AUROC': auroc(held_cost, costly),
@@ -170,11 +172,12 @@ def main():
             'way out': {
                 'decisions': int(expecting.sum()),
                 'expected cost of holding, middle': float(np.median(held_cost[expecting])),
-                'some push at least halves it': float((cost_changes[expecting].min(1) <= -0.5 * held_cost[expecting]).mean()),
+                'some push at least halves it': float(halves.any(1).mean()),
+                'no push lowers it by a tenth': float((lowest > -0.1 * held_cost[expecting]).mean()),
                 'pushes': {push: {
-                    'lowers cost most': float((best == column).mean()),
-                    'cost change, middle': float(np.median(cost_changes[expecting][:, column])),
-                    'reward change, middle': float(np.median(reward_changes[expecting][:, column])),
+                    'at least halves it': float(halves[:, column].mean()),
+                    'reward change when it does, middle': float(np.median(
+                        reward_changes[expecting][halves[:, column], column])) if halves[:, column].any() else None,
                 } for column, push in enumerate(pushes)},
             },
             'sizes': {name: [float(inputs[:, column].mean()), float(inputs[:, column].std())]
@@ -197,10 +200,12 @@ def main():
               f'away ({quiet["away, decisions"]}) {quiet["away, largest cost change"][0]:.4f} and {quiet["away, largest cost change"][1]:.4f}')
         print(f'  way out: {way_out["decisions"]} decisions expect a cost of 0.5 or more from holding '
               f'(middle {way_out["expected cost of holding, middle"]:.2f}); some push at least halves it at '
-              f'{way_out["some push at least halves it"]:.0%}')
+              f'{way_out["some push at least halves it"]:.0%}, no push lowers it by a tenth at '
+              f'{way_out["no push lowers it by a tenth"]:.0%}')
         for push, does in way_out['pushes'].items():
-            print(f'    {push:14s} lowers cost most at {does["lowers cost most"]:4.0%}; '
-                  f'middle cost change {does["cost change, middle"]:+.2f}, reward change {does["reward change, middle"]:+.3f}')
+            gives_up = does['reward change when it does, middle']
+            print(f'    {push:14s} at least halves it at {does["at least halves it"]:4.0%}'
+                  + ('' if gives_up is None else f'; middle reward change when it does {gives_up:+.3f}'))
         print('  sizes (mean, spread): ' + '; '.join(f'{name} {mean:.3f}, {spread:.3f}' for name, (mean, spread) in found['sizes'].items()))
 
     verdicts = {
