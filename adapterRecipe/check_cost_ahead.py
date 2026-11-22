@@ -48,7 +48,7 @@ import pathlib
 
 import numpy as np
 
-from cost_predictor import auroc, auroc_range, chance
+from cost_predictor import auroc, auroc_range, chance, read
 from episodes import Player, states
 
 KINDS = ('rolled', 'other actions', 'not rolled')
@@ -61,20 +61,14 @@ def main():
                         help='a cost_predictor.npz, with the cost_predictor.json that was saved beside it')
     parser.add_argument('--ahead', type=int, nargs='+', default=[1, 2, 3, 5, 10, 15],
                         help='the numbers of decisions to roll forward')
+    parser.add_argument('--likely', action='store_true',
+                        help='roll to the most likely next state, as look_ahead.py does, not to a random draw')
     args = parser.parse_args()
 
-    predictor_file = pathlib.Path(args.predictor)
-    predictor = dict(np.load(predictor_file))
-    trained = json.loads(predictor_file.with_suffix('.json').read_text())
+    # `files` are the episodes the predictor was scored on, which it has never been fitted to.
+    predictor, trained, files = read(args.predictor, args.checkpoint)
     if trained['ahead'] != 0:
         raise SystemExit('this needs a predictor of the cost of arriving in a state (--ahead 0)')
-    if trained['checkpoint'] != pathlib.Path(args.checkpoint).name:
-        raise SystemExit(f'the predictor was trained on the states of {trained["checkpoint"]}')
-    # The episodes the predictor was scored on, which it has never been fitted to.
-    first, last, count = trained['files']['test']
-    files = sorted(pathlib.Path(trained['episodes']).glob('seed_*.npz'))[:count]
-    if not files or [files[0].name, files[-1].name] != [first, last]:
-        raise SystemExit(f'the test episodes of the predictor are no longer in {trained["episodes"]}')
 
     # Player is the one place that knows how to build the agent. Its simulator is not used here.
     frozen = Player(args.checkpoint).frozen
@@ -91,7 +85,7 @@ def main():
         """
         numbers, rewards = {0: frozen.numbers(state)}, {0: frozen.reward(state)}
         for step in range(1, furthest + 1):
-            state = frozen.roll_forward(state, actions[step - 1])
+            state = frozen.roll_forward(state, actions[step - 1], sample=not args.likely)
             if step == 1:
                 continuous = state['deter']
             if step in steps:
@@ -132,7 +126,9 @@ def main():
             predicted_reward[step].append(reward_ahead[step][before])
 
     gap = np.concatenate(gaps)
-    print(f'{trained["task"]}, {len(files)} test episodes. One roll forward against the next saved state, '
+    print(f'{trained["task"]}, {len(files)} test episodes, rolled to '
+          + ('the most likely next state' if args.likely else 'a random draw of the next state'))
+    print('One roll forward against the next saved state, '
           f'continuous part: mean gap {gap.mean():.2g}, largest {gap.max():.2g}')
     if gap.mean() > 1e-3:
         raise SystemExit('FAIL: a state rolled forward once is not the next saved state, so states and actions are not lined up')
@@ -172,8 +168,9 @@ def main():
     out.write_text(json.dumps({
         'checkpoint': trained['checkpoint'],
         'task': trained['task'],
-        'predictor': str(predictor_file),
-        'test episodes': [first, last, count],
+        'predictor': args.predictor,
+        'test episodes': trained['files']['test'],
+        'rolled to': 'the most likely next state' if args.likely else 'a random draw',
         'decisions scored': len(cost),
         'costly share': float(costly.mean()),
         'one roll against the next saved state, continuous part': {'mean gap': float(gap.mean()), 'largest gap': float(gap.max())},

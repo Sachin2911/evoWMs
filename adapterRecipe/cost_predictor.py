@@ -107,6 +107,34 @@ def chance(predictor, numbers):
     return special.expit(score(predictor, numbers))
 
 
+def expected_cost(predictor, numbers):
+    """chance() times the mean cost of a costly decision, written for the GPU.
+
+    It is for use inside FrozenDreamer.compiled, where numpy and scipy cannot go.
+    `predictor` then holds the weights, offset and mean_cost.
+    """
+    import jax
+    return jax.nn.sigmoid(numbers @ predictor['weights'] + predictor['offset']) * predictor['mean_cost']
+
+
+def read(file, checkpoint):
+    """Reads a predictor this script saved, for use with the agent in `checkpoint`.
+
+    Returns its arrays, what was recorded when it was trained, and the files of its test
+    episodes, which it was never fitted to.
+    """
+    file = pathlib.Path(file)
+    predictor = dict(np.load(file))
+    trained = json.loads(file.with_suffix('.json').read_text())
+    if trained['checkpoint'] != pathlib.Path(checkpoint).name:
+        raise SystemExit(f'the predictor was trained on the states of {trained["checkpoint"]}')
+    first, last, count = trained['files']['test']
+    files = sorted(pathlib.Path(trained['episodes']).glob('seed_*.npz'))[:count]
+    if not files or [files[0].name, files[-1].name] != [first, last]:
+        raise SystemExit(f'the test episodes of the predictor are no longer in {trained["episodes"]}')
+    return predictor, trained, files
+
+
 def misfit(scores, costly):
     """How badly the scores fit the answers: the mean of -log(chance given to what happened). 0 is perfect."""
     return np.mean(np.logaddexp(0, scores) - costly * scores)

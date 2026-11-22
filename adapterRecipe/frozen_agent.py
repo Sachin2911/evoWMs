@@ -38,12 +38,22 @@ class FrozenDreamer:
     # called from a function that has been passed to compiled() below. Each takes and
     # returns a batch: one row per state.
 
-    def roll_forward(self, state, action):
+    def roll_forward(self, state, action, sample=True):
         """The state the world model expects after taking `action` in `state`.
 
-        Part of the model's next state is a random draw, so two calls can differ.
+        Part of the model's next state is a random draw, so two calls can differ. With
+        sample=False each categorical choice is instead the one the model finds most
+        likely, and the same state and action always give the same next state.
         """
-        return self._model.img_step(state, action)
+        import jax
+        import jax.numpy as jnp
+        following = self._model.img_step(state, action)
+        if sample:
+            return following
+        # `logit` holds how likely the model finds each class of each choice.
+        likely = jnp.argmax(following['logit'], -1)
+        classes = following['logit'].shape[-1]
+        return {**following, 'stoch': jax.nn.one_hot(likely, classes, dtype=following['stoch'].dtype)}
 
     def reward(self, state):
         """The reward the world model predicts for the decision that led to `state`."""
