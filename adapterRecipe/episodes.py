@@ -66,6 +66,7 @@ class Player:
         simulator_wrapper = SafetyGym(
             task.split('_', 1)[1], platform=config.jax.platform, **config.env.safetygym)
         simulator = simulator_wrapper._dmenv
+        self._simulator_wrapper = simulator_wrapper
         self._env = embodied.BatchEnv(
             [safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
         self.agent = agt.Agent(self._env.obs_space, self._env.act_space, embodied.Counter(), config)
@@ -103,6 +104,38 @@ class Player:
         driver.on_episode(lambda episode, _worker: episodes.append(episode))
         driver(policy, episodes=len(seeds), lag=self._penalty)
         return episodes
+
+    def replay(self, seed, actions, cameras=False):
+        """Steps the simulator through `actions` from the start of episode `seed`, with no agent.
+
+        Returns the reward and the cost that came after each action. Entry t of what comes
+        back is what an episode from play() holds at entry t + 1.
+
+        The actions pass through the same wrappers as when the agent plays, so the
+        simulator is handed exactly what it was handed then. The cameras are not drawn
+        unless `cameras` is set: the world and its physics follow from the seed and the
+        actions alone, and leaving the drawing out is several times faster.
+        """
+        self._seeds = iter([seed])
+        drawn = self._simulator_wrapper._render
+        self._simulator_wrapper._render = cameras
+
+        def step(action, reset):
+            return self._env.step({'action': action[None], 'reset': np.array([reset])})
+
+        try:
+            actions = np.asarray(actions, np.float32)
+            step(np.zeros_like(actions[0]), True)    # as SafeDreamer's loop starts an episode
+            rewards, costs = [], []
+            for action in actions:
+                came = step(action, False)
+                rewards.append(came['reward'][0])
+                costs.append(came['cost'][0])
+                if came['is_last'][0]:
+                    break
+        finally:
+            self._simulator_wrapper._render = drawn
+        return np.array(rewards, np.float32), np.array(costs, np.float32)
 
     def play(self, seeds, adapter=None):
         """Plays one episode per seed, with `adapter` if given, and hands each over as soon as it ends.
