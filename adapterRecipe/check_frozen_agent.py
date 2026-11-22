@@ -1,10 +1,11 @@
-"""Checks frozen_agent.py: an adapter that changes nothing must replay the unadapted agent exactly.
+"""Checks frozen_agent.py and episodes.py: an adapter that changes nothing must replay the unadapted agent exactly.
 
 Plays the same few episodes four ways and compares every action, reward and cost:
 
-  alone        the agent called directly, as safeDreamerBaselines/evaluate.py calls it
-  untouched    through FrozenDreamer.policy, with an adapter that returns the proposed action
-  zero         through FrozenDreamer.policy, with an adapter that uses all five pieces and then
+  alone        the agent called directly, all episodes in one go, as
+               safeDreamerBaselines/evaluate.py plays
+  untouched    through Player.play with no adapter, which is how episodes.py collects
+  zero         through Player.play with an adapter that uses all five pieces and then
                multiplies what they gave by zero
   alone again  the first way once more
 
@@ -28,15 +29,10 @@ import argparse
 import json
 import os
 import pathlib
-import sys
 
 import numpy as np
 
-# evaluate.py has the check that a checkpoint fits the agent. Importing it also puts
-# SafeDreamer's code on the path.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / 'safeDreamerBaselines'))
-from evaluate import NAME_PATTERN, load_checkpoint  # noqa: E402
-from frozen_agent import FrozenDreamer  # noqa: E402
+from episodes import Player
 
 
 def main():
@@ -45,48 +41,10 @@ def main():
     parser.add_argument('--episodes', type=int, default=2)
     parser.add_argument('--first-seed', type=int, default=0)
     args = parser.parse_args()
-    variant, task, _ = NAME_PATTERN.search(args.checkpoint).groups()
+    seeds = range(args.first_seed, args.first_seed + args.episodes)
 
-    # The agent and its simulator, built the way evaluate.py builds them.
-    import SafeDreamer  # noqa: F401  (also makes `embodied` importable)
-    import embodied
-    from embodied.envs.safetygym import SafetyGym
-    from SafeDreamer import agent as agt
-    from SafeDreamer import train as safedreamer_train
-
-    config = embodied.Config(agt.Agent.configs['defaults']).update(agt.Agent.configs[variant])
-    config = embodied.Flags(config).parse(['--method', variant, '--task', task])
-    simulator_wrapper = SafetyGym(
-        task.split('_', 1)[1], platform=config.jax.platform, **config.env.safetygym)
-    simulator = simulator_wrapper._dmenv
-    env = embodied.BatchEnv([safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
-    agent = agt.Agent(env.obs_space, env.act_space, embodied.Counter(), config)
-    load_checkpoint(agent, args.checkpoint)
-    penalty = safedreamer_train.PIDLagrangian(config).lagrange_penalty
-    frozen = FrozenDreamer(agent)
-
-    # As in evaluate.py, the seed of an episode is set where SafeDreamer starts it: in the
-    # simulator's reset. The adapter's random numbers are fixed there too.
-    current = {}
-    unseeded_reset = simulator.reset
-
-    def seeded_reset(**_):
-        seed = next(current['seeds'])
-        agent.rng = np.random.default_rng(seed)
-        frozen.reseed(seed)
-        return unseeded_reset(seed=seed)
-
-    simulator.reset = seeded_reset
-
-    def play(policy):
-        """Plays the episodes with `policy` and returns each one's actions, rewards and costs."""
-        current['seeds'] = iter(range(args.first_seed, args.first_seed + args.episodes))
-        episodes = []
-        driver = embodied.Driver(env)
-        driver.on_episode(lambda episode, _worker: episodes.append(
-            {name: np.array(episode[name]) for name in ('action', 'reward', 'cost')}))
-        driver(policy, episodes=args.episodes, lag=penalty)
-        return episodes
+    player = Player(args.checkpoint)
+    agent, frozen = player.agent, player.frozen
 
     def pieces(state, proposed):
         """Every piece, used once."""
@@ -102,9 +60,6 @@ def main():
 
     use_pieces = frozen.compiled(pieces)
     seen = []    # what the pieces gave at each decision of the `zero` run
-
-    def untouched(state, proposed):
-        return proposed
 
     def zero(state, proposed):
         gave = use_pieces(state, proposed)
@@ -122,17 +77,21 @@ def main():
         shift = 0.0 * gave['likely action']
         return proposed * (1 + gain) + shift
 
-    ways = {
-        'alone': lambda *inputs: agent.policy(*inputs, mode='eval'),
-        'untouched': lambda *inputs: frozen.policy(*inputs, adapter=untouched),
-        'zero': lambda *inputs: frozen.policy(*inputs, adapter=zero),
-        'alone again': lambda *inputs: agent.policy(*inputs, mode='eval'),
+    def alone(*inputs):
+        return agent.policy(*inputs, mode='eval')
+
+    # `alone` plays all the episodes in one go and play() starts afresh for each one, so
+    # their agreement also shows that the two ways of starting an episode are the same.
+    played = {
+        'alone': player.run(alone, seeds),
+        'untouched': list(player.play(seeds)),
+        'zero': list(player.play(seeds, adapter=zero)),
+        'alone again': player.run(alone, seeds),
     }
-    played = {name: play(policy) for name, policy in ways.items()}
 
     def same(first, second):
         return all(np.array_equal(a[name], b[name])
-                   for a, b in zip(played[first], played[second]) for name in a)
+                   for a, b in zip(played[first], played[second]) for name in ('action', 'reward', 'cost'))
 
     for name, episodes in played.items():
         totals = ', '.join(f'reward {e["reward"].sum():.3f} cost {e["cost"].sum():.0f}' for e in episodes)
@@ -164,7 +123,7 @@ def main():
     replays = same('alone', 'alone again')
     verdicts = {
         'episodes replay at all (alone = alone again)': replays,
-        'adapter that returns the proposed action replays': same('alone', 'untouched'),
+        'play() with no adapter replays': same('alone', 'untouched'),
         'zero-weight adapter that uses the pieces replays': same('alone', 'zero'),
     }
     for name, verdict in verdicts.items():
@@ -172,7 +131,7 @@ def main():
     out = pathlib.Path(os.environ.get('MS_RUN_DIR', '.')) / 'check_frozen_agent.json'
     out.write_text(json.dumps({
         'checkpoint': pathlib.Path(args.checkpoint).name,
-        'seeds': list(range(args.first_seed, args.first_seed + args.episodes)),
+        'seeds': list(seeds),
         'rendering': os.environ.get('MUJOCO_GL'),
         'verdicts': verdicts,
         'totals': {name: [{'reward': float(e['reward'].sum()), 'cost': float(e['cost'].sum())}
