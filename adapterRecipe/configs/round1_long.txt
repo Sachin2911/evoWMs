@@ -1,0 +1,8 @@
+r1long-real-hidden-ahead15-penalty-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 1500000 --seed 0
+r1long-real-hidden-ahead15-penalty-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 1500000 --seed 1
+r1long-real-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring real --budget 1500000 --seed 0
+r1long-real-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring real --budget 1500000 --seed 1
+r1long-prescreen-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring prescreen --budget 1500000 --seed 0
+r1long-prescreen-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring prescreen --budget 1500000 --seed 1
+r1long-real-const-ahead15-eps-s0 PointGoal1 --reads const --gate ahead15 --ranking eps --scoring real --budget 1500000 --seed 0
+r1long-real-const-ahead15-eps-s1 PointGoal1 --reads const --gate ahead15 --ranking eps --scoring real --budget 1500000 --seed 1

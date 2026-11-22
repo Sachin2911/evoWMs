@@ -1,0 +1,8 @@
+r1-real-hidden-ahead15-floor-s0 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead15-floor-s1 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring real --budget 600000 --seed 1
+r1-imagined-hidden-ahead15-floor-s0 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-ahead15-floor-s1 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 1
+r1-imagined-hidden-ahead15-floor90-s0 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 0 --reward-floor 0.9
+r1-imagined-hidden-ahead15-floor90-s1 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 1 --reward-floor 0.9
+r1-prescreen-hidden-ahead15-floor-s0 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring prescreen --budget 600000 --seed 0
+r1-prescreen-hidden-ahead15-floor-s1 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring prescreen --budget 600000 --seed 1

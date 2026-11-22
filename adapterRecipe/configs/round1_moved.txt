@@ -1,0 +1,5 @@
+r1-imagined-hidden-arrived-penalty-s1 PointGoal1 --reads hidden --gate arrived --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-real-hidden-ahead15-penalty-4ep-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0 --episodes-per-candidate 4 --real-candidates 8
+r1-real-hidden-ahead15-penalty-4ep-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1 --episodes-per-candidate 4 --real-candidates 8
+r1-real-hidden-ahead15-penalty-w3-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0 --penalty-weight 3
+r1-real-hidden-ahead15-penalty-w3-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1 --penalty-weight 3

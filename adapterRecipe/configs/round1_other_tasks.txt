@@ -1,0 +1,16 @@
+r1o-imagined-hidden-ahead15-penalty-s0 CarGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1o-imagined-hidden-ahead15-penalty-s1 CarGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1o-real-hidden-ahead15-penalty-s0 CarGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1o-real-hidden-ahead15-penalty-s1 CarGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1o-imagined-hidden-ahead15-penalty-s0 PointPush1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1o-imagined-hidden-ahead15-penalty-s1 PointPush1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1o-real-hidden-ahead15-penalty-s0 PointPush1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1o-real-hidden-ahead15-penalty-s1 PointPush1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1o-imagined-hidden-ahead15-penalty-s0 PointGoal2 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1o-imagined-hidden-ahead15-penalty-s1 PointGoal2 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1o-real-hidden-ahead15-penalty-s0 PointGoal2 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1o-real-hidden-ahead15-penalty-s1 PointGoal2 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1o-imagined-hidden-ahead15-penalty-s0 PointButton1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1o-imagined-hidden-ahead15-penalty-s1 PointButton1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1o-real-hidden-ahead15-penalty-s0 PointButton1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1o-real-hidden-ahead15-penalty-s1 PointButton1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1

@@ -1,0 +1,10 @@
+check-zero PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set
+check-steer1 PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=1 2,3=-1
+check-steer3 PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=3 2,3=-3
+check-steer3-slow PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=3 2,3=-3 3,2=2 1,2=-2
+check-steer3-brake PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=3 2,3=-3 0,0=-0.5
+check-steer6-slow PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=6 2,3=-6 3,2=3 1,2=-3
+check-slow-only PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 3,2=2 1,2=-2
+check-brake-only PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 0,0=-1
+check-steer3-nogate PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate none --episodes 10 --set 4,3=3 2,3=-3 3,2=2 1,2=-2
+check-steer3-reward PointGoal1 --cost-net /home-mscluster/smohan/runs/evoWMs-round1-92239/task-0028/cost_net.npz --reads look --gate ahead15 --episodes 10 --set 4,3=3 2,3=-3 3,2=2 1,2=-2 6,3=0.5 8,3=-0.5

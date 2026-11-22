@@ -1,0 +1,62 @@
+r1-real-hidden-none-safe-first-s0 PointGoal1 --reads hidden --gate none --ranking safe-first --scoring real --budget 600000 --seed 0 --first-step-size 0.2
+r1-real-hidden-none-safe-first-s1 PointGoal1 --reads hidden --gate none --ranking safe-first --scoring real --budget 600000 --seed 1 --first-step-size 0.2
+r1-real-hidden-none-penalty-s0 PointGoal1 --reads hidden --gate none --ranking penalty --scoring real --budget 600000 --seed 0 --first-step-size 0.2
+r1-real-hidden-none-penalty-s1 PointGoal1 --reads hidden --gate none --ranking penalty --scoring real --budget 600000 --seed 1 --first-step-size 0.2
+r1-real-hidden-none-eps-s0 PointGoal1 --reads hidden --gate none --ranking eps --scoring real --budget 600000 --seed 0 --first-step-size 0.2
+r1-real-hidden-none-eps-s1 PointGoal1 --reads hidden --gate none --ranking eps --scoring real --budget 600000 --seed 1 --first-step-size 0.2
+r1-real-hidden-ahead5-safe-first-s0 PointGoal1 --reads hidden --gate ahead5 --ranking safe-first --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead5-safe-first-s1 PointGoal1 --reads hidden --gate ahead5 --ranking safe-first --scoring real --budget 600000 --seed 1
+r1-real-hidden-ahead5-penalty-s0 PointGoal1 --reads hidden --gate ahead5 --ranking penalty --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead5-penalty-s1 PointGoal1 --reads hidden --gate ahead5 --ranking penalty --scoring real --budget 600000 --seed 1
+r1-real-hidden-ahead5-eps-s0 PointGoal1 --reads hidden --gate ahead5 --ranking eps --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead5-eps-s1 PointGoal1 --reads hidden --gate ahead5 --ranking eps --scoring real --budget 600000 --seed 1
+r1-real-hidden-ahead15-safe-first-s0 PointGoal1 --reads hidden --gate ahead15 --ranking safe-first --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead15-safe-first-s1 PointGoal1 --reads hidden --gate ahead15 --ranking safe-first --scoring real --budget 600000 --seed 1
+r1-real-hidden-ahead15-penalty-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead15-penalty-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1-real-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring real --budget 600000 --seed 0
+r1-real-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring real --budget 600000 --seed 1
+r1-real-const-ahead15-penalty-s0 PointGoal1 --reads const --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1-real-const-ahead15-penalty-s1 PointGoal1 --reads const --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1-real-probs-ahead15-penalty-s0 PointGoal1 --reads probs --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1-real-probs-ahead15-penalty-s1 PointGoal1 --reads probs --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1-real-deter-ahead15-penalty-s0 PointGoal1 --reads deter --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0
+r1-real-deter-ahead15-penalty-s1 PointGoal1 --reads deter --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1
+r1-prescreen-hidden-ahead15-penalty-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring prescreen --budget 600000 --seed 0
+r1-prescreen-hidden-ahead15-penalty-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring prescreen --budget 600000 --seed 1
+r1-prescreen-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring prescreen --budget 600000 --seed 0
+r1-prescreen-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring prescreen --budget 600000 --seed 1
+r1-imagined-hidden-ahead15-penalty-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-ahead15-penalty-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-imagined-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring imagined --budget 300000 --seed 1
+r1-imagined-hidden-ahead15-safe-first-s0 PointGoal1 --reads hidden --gate ahead15 --ranking safe-first --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-ahead15-safe-first-s1 PointGoal1 --reads hidden --gate ahead15 --ranking safe-first --scoring imagined --budget 300000 --seed 1
+r1-imagined-const-ahead15-penalty-s0 PointGoal1 --reads const --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-const-ahead15-penalty-s1 PointGoal1 --reads const --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-imagined-probs-ahead15-penalty-s0 PointGoal1 --reads probs --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-probs-ahead15-penalty-s1 PointGoal1 --reads probs --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-imagined-deter-ahead15-penalty-s0 PointGoal1 --reads deter --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-deter-ahead15-penalty-s1 PointGoal1 --reads deter --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-imagined-hidden-none-penalty-s0 PointGoal1 --reads hidden --gate none --ranking penalty --scoring imagined --budget 300000 --seed 0 --first-step-size 0.2
+r1-imagined-hidden-none-penalty-s1 PointGoal1 --reads hidden --gate none --ranking penalty --scoring imagined --budget 300000 --seed 1 --first-step-size 0.2
+r1-imagined-hidden-ahead5-penalty-s0 PointGoal1 --reads hidden --gate ahead5 --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-ahead5-penalty-s1 PointGoal1 --reads hidden --gate ahead5 --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-imagined-hidden-arrived-penalty-s0 PointGoal1 --reads hidden --gate arrived --ranking penalty --scoring imagined --budget 300000 --seed 0
+r1-imagined-hidden-arrived-penalty-s1 PointGoal1 --reads hidden --gate arrived --ranking penalty --scoring imagined --budget 300000 --seed 1
+r1-real-hidden-ahead15-penalty-4ep-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0 --episodes-per-candidate 4 --real-candidates 8
+r1-real-hidden-ahead15-penalty-4ep-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1 --episodes-per-candidate 4 --real-candidates 8
+r1-real-hidden-ahead15-penalty-w3-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 0 --penalty-weight 3
+r1-real-hidden-ahead15-penalty-w3-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring real --budget 600000 --seed 1 --penalty-weight 3
+r1-prescreen-hidden-ahead15-penalty-fixedmodel-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring prescreen --budget 600000 --seed 0 --retrain-every 0
+r1-prescreen-hidden-ahead15-penalty-fixedmodel-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring prescreen --budget 600000 --seed 1 --retrain-every 0
+r1-imagined-hidden-ahead15-penalty-fixedmodel-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --retrain-every 0
+r1-imagined-hidden-ahead15-penalty-fixedmodel-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --retrain-every 0
+r1-imagined-hidden-ahead15-penalty-h30-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --imagined-decisions 30
+r1-imagined-hidden-ahead15-penalty-h30-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --imagined-decisions 30
+r1-imagined-hidden-ahead15-penalty-g3-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --imagined-generations 3
+r1-imagined-hidden-ahead15-penalty-g3-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --imagined-generations 3
+r1-imagined-hidden-ahead15-penalty-g30-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --imagined-generations 30
+r1-imagined-hidden-ahead15-penalty-g30-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --imagined-generations 30
+r1-imagined-hidden-ahead15-penalty-ep8-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --round-episodes 8 --validate-every 2
+r1-imagined-hidden-ahead15-penalty-ep8-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --round-episodes 8 --validate-every 2

@@ -1,0 +1,29 @@
+r2-imagined-hidden-ahead15-feedback-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-s2 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 2 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-allstarts-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 0 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-allstarts-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 0 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-nobounds-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12
+r2-imagined-hidden-ahead15-feedback-nobounds-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12
+r2-imagined-hidden-ahead15-eps-s0 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-eps-s1 PointGoal1 --reads hidden --gate ahead15 --ranking eps --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-floor-s0 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-floor-s1 PointGoal1 --reads hidden --gate ahead15 --ranking floor --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-penalty-s0 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-penalty-s1 PointGoal1 --reads hidden --gate ahead15 --ranking penalty --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-const-ahead15-feedback-s0 PointGoal1 --reads const --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-const-ahead15-feedback-s1 PointGoal1 --reads const --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-probs-ahead15-feedback-s0 PointGoal1 --reads probs --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-probs-ahead15-feedback-s1 PointGoal1 --reads probs --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-deter-ahead15-feedback-s0 PointGoal1 --reads deter --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-deter-ahead15-feedback-s1 PointGoal1 --reads deter --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead5-feedback-s0 PointGoal1 --reads hidden --gate ahead5 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead5-feedback-s1 PointGoal1 --reads hidden --gate ahead5 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-none-feedback-s0 PointGoal1 --reads hidden --gate none --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-none-feedback-s1 PointGoal1 --reads hidden --gate none --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4
+r2-imagined-hidden-ahead15-feedback-g3-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4 --imagined-generations 3
+r2-imagined-hidden-ahead15-feedback-g3-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4 --imagined-generations 3
+r2-imagined-hidden-ahead15-feedback-ep8-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4 --round-episodes 8 --validate-every 2
+r2-imagined-hidden-ahead15-feedback-ep8-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4 --round-episodes 8 --validate-every 2
+r2-imagined-hidden-ahead15-feedback-target2-s0 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 0 --start-episodes 12 --weight-bound 3 --output-bound 4 --feedback-target 2
+r2-imagined-hidden-ahead15-feedback-target2-s1 PointGoal1 --reads hidden --gate ahead15 --ranking feedback --scoring imagined --budget 300000 --seed 1 --start-episodes 12 --weight-bound 3 --output-bound 4 --feedback-target 2
