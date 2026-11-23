@@ -13,7 +13,8 @@ agent and its simulator can show. Six things must hold, or the check fails:
                    second time
     remembered     in an episode played with random weights, the memory saved at each
                    decision is the one that the decision before handed on, and the action
-                   saved is the one the adapter gives for the saved state and memory
+                   saved is the one the adapter gives for the saved state and memory. The
+                   decisions are worked out again one at a time, as they were played
     told           in that episode the world model was told the action that was taken (for
                    DreamerV3: one roll forward from a saved state with the saved action
                    gives the continuous part of the next saved state)
@@ -22,6 +23,12 @@ Measured, with nothing fitted:
 
     sizes          what the look-ahead numbers are divided by, by stretch
     time           milliseconds for one decision
+    all at once    how far the adapter's outputs for the decisions of an episode worked
+                   out together, as an imagined roll works them out, lie from the same
+                   decisions worked out one at a time, as the simulator is played. The
+                   agent computes in half the digits, and the last of them depend on how
+                   many states are worked out together. This is measured with the random
+                   weights and with steering
     played         whole episodes with steering written in this form, against the
                    unadapted agent on the same seeds
 
@@ -95,9 +102,11 @@ def main():
             f'the largest output is {np.abs(once["output"]).max():.3f} and the largest memory {np.abs(once["memory"]).max():.3f}')
     held_to('same again', all(np.array_equal(once[name], again[name]) for name in once), 'the same actions, outputs and memories twice')
 
+    one = {name: part[:1] for name, part in states[0].items()}
+    act(one, saved[0]['proposed'][:1], adapter.start(), fixed, weights)     # the first call for one state is slower
     started = time.perf_counter()
     for _ in range(20):
-        act({name: part[:1] for name, part in states[0].items()}, saved[0]['proposed'][:1], adapter.start(), fixed, weights)
+        act(one, saved[0]['proposed'][:1], adapter.start(), fixed, weights)
     result['milliseconds a decision'] = round((time.perf_counter() - started) / 20 * 1000, 1)
     print(f'       time: {result["milliseconds a decision"]} ms for one decision', flush=True)
 
@@ -117,13 +126,34 @@ def main():
     episode, = player.play([args.first_seed], adapter=with_weights(small), memory=adapter.start())
     entries = len(episode['proposed']) - 1     # the last entry's action is never taken
     state = frozen.written_out(frozen.kept(episode, slice(0, entries)))
-    made = act(state, episode['proposed'][:entries], episode['memory'][:entries], fixed, small)
-    # Worked out here for all decisions at once and in the episode one at a time, which can differ in the last digits.
-    memory_gap = float(np.abs(made['memory'][:-1] - episode['memory'][1:entries]).max())
-    action_gap = float(np.abs(made['action'] - episode['action'][:entries]).max())
-    held_to('remembered', memory_gap < 1e-2 and action_gap < 1e-2 and not episode['memory'][0].any(),
-            f'over {entries} decisions the memory saved is the one handed on to within {memory_gap:.4f} and the action saved '
-            f'is the adapter\'s to within {action_gap:.4f}; the memory reaches {np.abs(episode["memory"]).max():.3f}')
+
+    def one_at_a_time(weights, memories):
+        """What the adapter gives for each saved decision on its own, the way the episode was played."""
+        each = [act({name: part[entry:entry + 1] for name, part in state.items()}, episode['proposed'][entry:entry + 1],
+                    memories[entry:entry + 1], fixed, weights) for entry in range(entries)]
+        return {name: np.concatenate([made[name] for made in each]) for name in each[0]}
+
+    alone = one_at_a_time(small, episode['memory'])
+    # The episode keeps an action in the agent's half digits, so the last digits of the two can differ.
+    memory_gap = float(np.abs(alone['memory'][:-1] - episode['memory'][1:entries]).max())
+    action_gap = float(np.abs(alone['action'] - episode['action'][:entries]).max())
+    held_to('remembered', memory_gap < 1e-3 and action_gap < 1e-3 and not episode['memory'][0].any(),
+            f'over {entries} decisions the memory saved is the one handed on to within {memory_gap:.5f} and the action saved '
+            f'is the adapter\'s to within {action_gap:.5f}; the memory reaches {np.abs(episode["memory"]).max():.3f}')
+
+    # all at once: the same decisions as one batch, against one at a time.
+    result['all at once'] = {}
+    for name, tried, memories in (('random weights', small, episode['memory']),
+                                  ('steering', adapter.steering(), np.zeros_like(episode['memory']))):
+        alone = one_at_a_time(tried, memories)
+        together = act(state, episode['proposed'][:entries], memories[:entries], fixed, tried)
+        gap = np.abs(together['output'] - alone['output']).max(1)
+        result['all at once'][name] = {'median': float(np.median(gap)), '9 in 10 within': float(np.quantile(gap, 0.9)),
+                                       '99 in 100 within': float(np.quantile(gap, 0.99)), 'largest': float(gap.max()),
+                                       'share above 0.05': float((gap > 0.05).mean())}
+        print(f'       all at once, {name}: the outputs differ by {np.median(gap):.4f} at the median decision, by less than '
+              f'{np.quantile(gap, 0.9):.4f} at 9 in 10 and {np.quantile(gap, 0.99):.4f} at 99 in 100, and by {gap.max():.4f} '
+              f'at the most; {(gap > 0.05).mean():.1%} of decisions differ by more than 0.05', flush=True)
     if hasattr(frozen, 'roll_forward'):
         def roll(state, action):
             return frozen.roll_forward(state, action, sample=False)['deter']
