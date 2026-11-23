@@ -51,8 +51,6 @@ from episodes import make_folder, save, states
 from look_ahead import look_ahead, measured_by_stretch, sizes
 from search import player_of
 
-COST_LIMIT = 2    # SafeDreamer's: the highest mean cost of an episode that counts as safe
-
 
 def mean_and_error(values):
     """The mean and its standard error."""
@@ -90,7 +88,8 @@ def main():
     parser.add_argument('--episodes', type=int, default=300)
     parser.add_argument('--first-seed', type=int, default=5000)
     parser.add_argument('--keep', type=int, default=0, help='how many episodes to save whole, internal states included')
-    parser.add_argument('--limit', type=float, default=COST_LIMIT, help='the cost limit: the highest mean episode cost that counts as safe')
+    parser.add_argument('--limit', type=float,
+                        help='the cost limit: the highest mean episode cost that counts as safe (default: the task\'s own)')
     args = parser.parse_args()
 
     out = pathlib.Path(os.environ.get('MS_RUN_DIR', '.'))
@@ -100,6 +99,8 @@ def main():
         player.watch = True
     frozen = player.frozen
     action_numbers = player.action_numbers
+    if args.limit is None:
+        args.limit = player.cost_limit
     described = {'kind': args.kind}
     act = None
     if args.kind == 'saved':

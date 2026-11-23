@@ -105,7 +105,6 @@ from imagine import Imagination
 from look_ahead import measured_by_stretch
 
 MOST_THE_PRICE_CHANGES = 1.5    # at one check, up or down
-COST_LIMIT = 2                  # SafeDreamer's: the highest mean cost of an episode that counts as safe
 
 
 def player_of(checkpoint):
@@ -212,7 +211,8 @@ def main():
     parser.add_argument('--episodes', type=int, default=10, help='real episodes of a check')
     parser.add_argument('--finalists', type=int, default=3)
     parser.add_argument('--more', type=int, default=20, help='further real episodes of each finalist')
-    parser.add_argument('--limit', type=float, default=COST_LIMIT, help='the cost limit: the highest mean episode cost that counts as safe')
+    parser.add_argument('--limit', type=float,
+                        help='the cost limit: the highest mean episode cost that counts as safe (default: the task\'s own)')
     parser.add_argument('--archive', action='store_true', help='score by an archive over cost level and manner of acting')
     parser.add_argument('--keep-predictor', action='store_true', help='do not fit the cost predictor again after a check')
     parser.add_argument('--cautious', action='store_true',
@@ -238,6 +238,8 @@ def main():
     player = player_of(args.checkpoint)
     frozen = player.frozen
     action_numbers = player.action_numbers
+    if args.limit is None:
+        args.limit = player.cost_limit
     if args.form == 'memory':
         adapter = adapters.MemoryAdapter(action_numbers, memory=not args.no_memory, added_on=args.added_on, stop=not args.no_stop,
                                          roll=args.look)

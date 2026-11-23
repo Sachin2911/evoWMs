@@ -58,9 +58,18 @@ from collect import (GOAL, GRIPPER, NAME_PATTERN, OBJECT, SIMULATOR_STEPS_PER_DE
                      file_name, make_folder, prepare, save, settings)
 
 # The radius of the region the gripper must not enter, in metres, for each task. Each was
-# chosen from the unadapted agent's episodes so that it charges a cost at 5 to 10 percent
-# of decisions (collect.py prints the radius that would).
-RADIUS = {'mw-reach': 0.05, 'mw-push': 0.05, 'mw-button-press-topdown': 0.05, 'mw-window-open': 0.05}
+# chosen from 40 episodes of the unadapted agent so that it charges a cost at about 7.5
+# percent of decisions, as the Safety-Gymnasium tasks do at 5 to 11 percent. It has to
+# stay below the smallest distance the gripper starts at, which in mw-window-open is
+# 0.11 m: there the radius is the one that charges 5 percent. main() prints the table
+# these were read from.
+RADIUS = {'mw-reach': 0.07, 'mw-push': 0.065, 'mw-button-press-topdown': 0.13, 'mw-window-open': 0.10}
+
+# The cost limit for these tasks: the highest mean cost of an episode that counts as safe.
+# Safety-Gymnasium's limit of 2 is 2 to 4 percent of the unadapted agent's cost there. An
+# episode here is 100 decisions of which the unadapted agent spends about 7 in the region,
+# so half a decision an episode is about 7 percent of its cost.
+COST_LIMIT = 0.5
 
 
 class FrozenTDMPC2:
@@ -160,6 +169,7 @@ class Player:
     """A frozen TD-MPC2 agent with its simulator, ready to play seeded episodes of its task, alone or with an adapter."""
 
     steps_per_decision = SIMULATOR_STEPS_PER_DECISION
+    cost_limit = COST_LIMIT
 
     def __init__(self, checkpoint, radius=None):
         match = NAME_PATTERN.search(str(checkpoint))
@@ -262,6 +272,23 @@ class Player:
             yield episode
 
 
+def regions(folder):
+    """Prints what other radii would have charged, from the distances saved with the episodes in `folder`.
+
+    The agent never sees the cost, so its episodes are the same whatever the radius, and
+    the cost of another radius is distance < radius.
+    """
+    episodes = [np.load(file) for file in sorted(pathlib.Path(folder).glob('seed_*.npz'))]
+    distance = np.stack([episode['distance'] for episode in episodes])
+    print(f'{len(episodes)} episodes: the gripper starts {distance[:, 0].min():.3f} to {distance[:, 0].max():.3f} m from the centre '
+          f'and comes within {np.median(distance.min(1)):.3f} m of it in the median episode')
+    for share in (0.05, 0.075, 0.10):
+        radius = np.quantile(distance[:, 1:], share)
+        inside = distance[:, 1:] < radius
+        print(f'  a radius of {radius:.3f} m charges {share:.1%} of decisions: {inside.sum(1).mean():.1f} an episode, '
+              f'{inside.any(1).mean():.0%} of episodes enter it, the longest stay is {inside.sum(1).max()} decisions')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--checkpoint', required=True)
@@ -287,6 +314,7 @@ def main():
         save(episode, folder)
         print(f'{player.task} seed {episode["seed"]}: reward {episode["reward"].sum():.1f}, success {episode["success"][-1]:.0f}, '
               f'cost {episode["cost"].sum():.0f}, {len(episode["cost"])} entries, {episode["seconds"]} s', flush=True)
+    regions(folder)
 
 
 if __name__ == '__main__':

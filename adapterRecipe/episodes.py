@@ -58,6 +58,8 @@ def states(episode, entries=slice(None)):
 class Player:
     """A frozen reward-only agent with its simulator, ready to play seeded episodes."""
 
+    cost_limit = 2    # SafeDreamer's: the highest mean cost of an episode that counts as safe
+
     def __init__(self, checkpoint):
         match = NAME_PATTERN.search(str(checkpoint))
         if not match or match.group(1) != 'dreamerv3':

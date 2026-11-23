@@ -265,7 +265,7 @@ class Rolls(unittest.TestCase):
 class MadeUpPlayer:
     """The made-up agent with a made-up simulator: its own model with other noise, and a cost for one corner of the state."""
 
-    task, steps_per_decision, action_numbers = 'made-up', 2, 2
+    task, steps_per_decision, action_numbers, cost_limit = 'made-up', 2, 2, 2
 
     def __init__(self, checkpoint=None):
         self.frozen = MadeUpAgent()
