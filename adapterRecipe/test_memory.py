@@ -328,6 +328,48 @@ class Search(unittest.TestCase):
         self.assertEqual(weights.shape, (adapter.count,))
         return final, checks, adapter, files
 
+    def test_stall_check(self):
+        """check_stall.py from end to end: steering, and then an adapter a search saved."""
+        import contextlib
+        import io
+        import json
+        import os
+        import sys
+        from unittest import mock
+
+        import check_stall
+        import cost_predictor
+        import search
+
+        with tempfile.TemporaryDirectory() as folder:
+            folder = pathlib.Path(folder)
+            (folder / 'episodes').mkdir()
+            (folder / 'run').mkdir()
+            for episode in MadeUpPlayer().play(range(1000, 1012)):
+                np.savez(folder / 'episodes' / f'seed_{episode["seed"]:04d}.npz', **episode)
+            (folder / 'episodes' / 'run.json').write_text(json.dumps({'checkpoint': 'made-up.ckpt', 'task': 'made-up'}))
+            common = ['--checkpoint', 'made-up.ckpt', '--predictor', str(folder / 'cost_predictor.npz')]
+            with mock.patch.dict(os.environ, {'MS_RUN_DIR': str(folder / 'run')}), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, 'argv', ['cost_predictor.py', '--episodes', str(folder / 'episodes'),
+                                                     '--test', '2', '--validation', '2', '--out', str(folder)]):
+                    cost_predictor.main()
+                for more in ([], ['--adapter', str(folder / 'run' / 'final.npz')]):
+                    if more:
+                        with mock.patch.object(sys, 'argv', ['search.py', *common, '--checks', '2', '--generations', '1', '--episodes', '2',
+                                                             '--finalists', '1', '--more', '2', '--starts', '24', '--roll', '6',
+                                                             '--candidates', '6']), mock.patch.object(search, 'player_of', MadeUpPlayer):
+                            search.main()
+                    with mock.patch.object(sys, 'argv', ['check_stall.py', *common, '--episodes', '3', '--starts', '40', '--roll', '6',
+                                                         '--draws', '2', *more]), mock.patch.object(check_stall, 'player_of', MadeUpPlayer):
+                        check_stall.main()
+                    result = json.loads((folder / 'run' / 'check_stall.json').read_text())
+                    self.assertEqual(result['starting states'], 40)
+                    self.assertEqual(len(result['groups by real reward']), 4)
+                    lowest, highest = result['groups by real reward'][0], result['groups by real reward'][-1]
+                    self.assertLess(lowest['real reward'], highest['real reward'])
+                    # The made-up simulator is the made-up model with other noise, so the two agree on which states earn more.
+                    self.assertGreater(result['rank agreement']['reward'], 0.3)
+
     def test_one_score(self):
         final, checks, adapter, files = self.run_search()
         self.assertEqual(adapter.count, 152)
