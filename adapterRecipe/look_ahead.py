@@ -20,10 +20,10 @@ any actions, and sizes() measures how large the numbers usually are.
 
 Why it is built this way:
 
-  The action is held, and the agent is not asked again on the way. That needs only the
-  model, the reward predictor, the value estimate and the cost predictor. Asking the agent
-  for an action in every imagined state would be cheap for DreamerV3, but TD-MPC2 proposes
-  by planning, which is far too slow to do inside every imagined step.
+  The action is held, and the agent is not asked again on the way. An adapter acts at
+  every decision, so a push that the agent undoes one decision later is not what will
+  happen. Holding stands in for an adapter that keeps pushing. The other way, a short push
+  after which the agent carries on, is still to be measured against this one.
 
   A push lasts the whole future. check_cost_ahead.py showed that which action is taken
   makes little difference to the cost of the next few decisions and a large one further
@@ -117,8 +117,12 @@ def futures(frozen, predictor, state, proposed, decisions, push=1.0):
 
 def look_ahead(frozen, predictor, state, proposed, decisions, push=1.0):
     """The 4A + 1 numbers an adapter reads, for every state of a batch. The arguments are those of pushed() and hold()."""
+    return numbers_of(futures(frozen, predictor, state, proposed, decisions, push))
+
+
+def numbers_of(imagined):
+    """The 4A + 1 numbers, from the futures that futures() imagined."""
     import jax.numpy as jnp
-    imagined = futures(frozen, predictor, state, proposed, decisions, push)
     cost = imagined['cost']
     # The value estimate stands for the reward still to come after the last imagined decision.
     reward = imagined['reward'] + imagined['value']

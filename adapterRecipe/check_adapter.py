@@ -22,16 +22,11 @@ Measured, with nothing fitted:
 
     sizes         what the look-ahead numbers are divided by, from the training episodes
                   of the cost predictor
-    candidates    over the decisions of the test episodes that are not charged and where
-                  holding the proposed action is expected to cost half a unit or more: how
-                  often some candidate at least halves that. For the four pushes of the
-                  look-ahead, and for 4, 16 and 64 further actions from the agent. This is
-                  what a re-rank has to work with (decision 3 of the design).
     time          milliseconds for one decision, for every kind
     played        whole episodes in the simulator with three adapters whose weights are
                   written down by hand, against the unadapted agent on the same seeds:
 
-                      re-rank, cost only    the candidate expected to cost least
+                      re-rank, cost only    the pushed action expected to cost least
                       residual, steering    size tens; each action number is shifted
                                             towards the push expected to cost less, by the
                                             difference of the two cost changes
@@ -179,46 +174,6 @@ def main():
     print('random weights: share of decisions at which the action taken changes: '
           + ', '.join(f'{kind} {np.concatenate(shares).mean():.0%}' for kind, shares in changed.items()), flush=True)
 
-    # candidates: what a re-rank has to choose from where the look-ahead expects a cost.
-    many = (4, 16, 64)
-    wide = make('re-rank', None, draws=many[-1]).compiled(frozen, everything=True)
-    halved = {'pushes': []}
-    halved.update({f'{count} further actions': [] for count in many})
-    lowest = {name: [] for name in halved}
-    apart, expecting_count, free_count = [], 0, 0
-    for number, file in enumerate(files):
-        saved = np.load(file)
-        state, proposed = states(saved), saved['proposed']
-        frozen.reseed(number)
-        ranked = wide(state, proposed, fixed, np.zeros(2, np.float32))
-        pushes = look(state, proposed, for_gpu)[:, 1:1 + 2 * action_numbers]
-        holding = ranked['cost'][0]
-        # Not charged, and not the entry that ends the episode, where no action is taken.
-        free = saved['cost'] == 0
-        free[-1] = False
-        expecting = free & (holding >= 0.5)
-        free_count += int(free.sum())
-        expecting_count += int(expecting.sum())
-        # The lowest cost each set of candidates offers, as a share of the cost of holding.
-        offered = {'pushes': 1 + pushes[expecting].min(1) / holding[expecting]}
-        for count in many:
-            offered[f'{count} further actions'] = ranked['cost'][1:1 + count][:, expecting].min(0) / holding[expecting]
-        for name, share in offered.items():
-            halved[name].append(share <= 0.5)
-            lowest[name].append(share)
-        clipped = np.clip(ranked['candidates'], -1, 1)
-        apart.append(np.abs(clipped[1:] - clipped[:1])[:, expecting].mean(0))
-    candidates = {name: {'some candidate at least halves it': float(np.concatenate(halved[name]).mean()),
-                         'lowest cost on offer over the cost of holding, middle': float(np.median(np.concatenate(lowest[name])))}
-                  for name in halved}
-    apart = np.concatenate(apart).mean(0)
-    print(f'candidates: {expecting_count} of {free_count} decisions that are not charged expect a cost of 0.5 or more from holding')
-    for name, found in candidates.items():
-        print(f'  {name:19s} some candidate at least halves it at {found["some candidate at least halves it"]:4.0%}; '
-              f'lowest cost on offer, middle: {found["lowest cost on offer over the cost of holding, middle"]:.2f} of holding')
-    print('  a further action lies this far from the proposed one, mean per action number: '
-          + ', '.join(f'{distance:.2f}' for distance in apart) + ' (a push all the way moves a number by up to 2)', flush=True)
-
     # time: one state at a time, as when playing. The first call for a new shape also compiles.
     milliseconds = {}
     singles = [({name: part[entry:entry + 1] for name, part in states(first).items()}, first['proposed'][entry:entry + 1])
@@ -342,8 +297,6 @@ def main():
         'zero': {'action numbers changed': zero_changes, 'played': replayed},
         'random weights, decisions at which the action taken changes':
             {kind: float(np.concatenate(shares).mean()) for kind, shares in changed.items()},
-        'candidates': {'decisions not charged': free_count, 'of those, expecting 0.5 or more from holding': expecting_count,
-                       'sets': candidates, 'distance of a further action from the proposed one': [float(d) for d in apart]},
         'milliseconds for one decision': milliseconds,
         'seeds played': seeds,
         'played': report,

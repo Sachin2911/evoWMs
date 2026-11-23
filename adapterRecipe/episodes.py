@@ -13,6 +13,15 @@ made on seeing observation t:
 The first entry is the observation at reset, where reward and cost are 0. The last entry is
 the observation that ends the episode: its action is never taken, and is saved as zeros.
 
+With Player.watch set, an episode also holds what the simulator itself reported, again as
+what came of the action of entry t - 1:
+
+    cost_<kind>    the cost charged by each kind of object (hazards, buttons, ...)
+    speed          how fast the robot moved, as the mean over the decision's simulator steps
+    x, y           where the robot was at the end of the decision
+    goals          how many times the goal was reached during the decision
+    near_<kind>    the distance from the robot to the nearest object of each kind
+
 Run as a script, it plays the agent with no adapter and saves one file per episode. From
 this folder:
 
@@ -69,6 +78,7 @@ class Player:
         self._simulator_wrapper = simulator_wrapper
         self._env = embodied.BatchEnv(
             [safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
+        self.act_space = self._env.act_space
         self.agent = agt.Agent(self._env.obs_space, self._env.act_space, embodied.Counter(), config)
         load_checkpoint(self.agent, checkpoint)
         self.frozen = FrozenDreamer(self.agent)
@@ -90,6 +100,38 @@ class Player:
             return unseeded_reset(seed=seed)
 
         simulator.reset = seeded_reset
+
+        # With `watch` set, what the simulator reports at each of its steps is kept for
+        # the episode being played. It is hooked in the same way as the seed.
+        self.watch = False
+        self._watched = []
+        unwatched_reset, unwatched_step = simulator.reset, simulator.step
+
+        def looked_at(info):
+            task = simulator.unwrapped.task
+            place = np.asarray(task.agent.pos[:2], np.float64)
+            row = {name: float(value) for name, value in info.items()
+                   if name.startswith('cost_') and name != 'cost_sum'}
+            row.update({'speed': float(np.linalg.norm(task.agent.vel[:2])), 'x': float(place[0]), 'y': float(place[1]),
+                        'goals': float(bool(info.get('goal_met', False)))})
+            for group in task._obstacles:
+                positions = np.asarray(group.pos, np.float64).reshape(-1, 3)[:, :2]
+                row[f'near_{group.name}'] = float(np.linalg.norm(positions - place, axis=1).min())
+            return row
+
+        def watched_reset(**options):
+            result = unwatched_reset(**options)
+            # The first row is the world as the reset left it.
+            self._watched = [looked_at({})] if self.watch else []
+            return result
+
+        def watched_step(action):
+            result = unwatched_step(action)
+            if self.watch:
+                self._watched.append(looked_at(result[-1]))
+            return result
+
+        simulator.reset, simulator.step = watched_reset, watched_step
 
     def run(self, policy, seeds):
         """Plays one episode per seed with `policy`, a function of the form SafeDreamer's own loop takes.
@@ -169,7 +211,26 @@ class Player:
             }
             if not np.array_equal(states(episode)['stoch'], written_out):
                 raise SystemExit('a categorical choice was not exactly zeros and a one, so saving its number loses something')
+            if self.watch:
+                episode.update(self._by_decision(len(episode['reward'])))
             yield episode
+
+    def _by_decision(self, entries):
+        """What was watched at each simulator step of the episode just played, as one entry per decision."""
+        at_reset, rows, each = self._watched[0], self._watched[1:], self.steps_per_decision
+        if len(rows) != each * (entries - 1):
+            raise SystemExit(f'{len(rows)} simulator steps were watched in an episode of {entries - 1} decisions')
+        watched = {}
+        for name in sorted({name for row in rows for name in row}):
+            steps = np.array([row.get(name, 0.0) for row in rows], np.float32).reshape(entries - 1, each)
+            if name.startswith('cost_') or name == 'goals':
+                came = steps.sum(1)
+            elif name == 'speed':
+                came = steps.mean(1)
+            else:
+                came = steps[:, -1]
+            watched[name] = np.concatenate([[at_reset.get(name, 0.0)], came]).astype(np.float32)
+        return watched
 
 
 def file_name(seed):
