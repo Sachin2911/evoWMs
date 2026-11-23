@@ -1,7 +1,7 @@
 """Checks the adapter with memory on the real frozen agent, before any search.
 
 test_memory.py checks the arithmetic with a made-up agent. This checks what only the real
-agent and its simulator can show. Six things must hold, or the check fails:
+agent and its simulator can show. These must hold, or the check fails:
 
     zero           with every weight at zero the adapter gives back exactly the proposed
                    action at every decision of the test episodes, and its memory stays zero
@@ -18,6 +18,9 @@ agent and its simulator can show. Six things must hold, or the check fails:
     told           in that episode the world model was told the action that was taken (for
                    DreamerV3: one roll forward from a saved state with the saved action
                    gives the continuous part of the next saved state)
+    value          for TD-MPC2: the value the adapter reads, which leaves out the dropout
+                   the agent's Q-networks play with, lies as near the mean of 32 values
+                   with the dropout as one of those does
 
 Measured, with nothing fitted:
 
@@ -106,6 +109,14 @@ def main():
             f'the largest output is {np.abs(once["output"]).max():.3f} and the largest memory {np.abs(once["memory"]).max():.3f}')
     held_to('same again', all(np.array_equal(once[name], again[name]) for name in once), 'the same actions, outputs and memories twice')
 
+    if hasattr(frozen, 'worth_as_played'):
+        # The value is read without the dropout the agent's Q-networks play with. It has to be the same networks.
+        quiet = frozen.compiled(frozen.worth)(states[0])
+        as_played = np.stack([frozen.compiled(frozen.worth_as_played)(states[0]) for _ in range(32)])
+        gap, spread = np.median(np.abs(quiet - as_played.mean(0))), np.median(as_played.std(0))
+        held_to('value', bool(gap <= spread), f'without the dropout of the Q-networks the value is {gap:.3f} from the mean of 32 values '
+                f'with it, at the median state; one value with it is {spread:.3f} from that mean')
+
     one = {name: part[:1] for name, part in states[0].items()}
     act(one, saved[0]['proposed'][:1], adapter.start(), fixed, weights)     # the first call for one state is slower
     started = time.perf_counter()
@@ -138,7 +149,11 @@ def main():
     episode, = player.play([args.first_seed], adapter=recording, memory=adapter.start())
     entries = len(episode['proposed']) - 1     # the last entry's action is never taken
     carried = all(np.array_equal(calls[entry + 1][0], calls[entry][2]) for entry in range(len(calls) - 1))
-    saved_as_read = np.array_equal(episode['memory'], np.concatenate([held for held, _, _ in calls]))
+    # An episode has one more entry than it has decisions. A player that does not ask the
+    # adapter at the last entry saves there the memory the last decision handed on.
+    read = np.concatenate([held for held, _, _ in calls])
+    saved_as_read = (np.array_equal(episode['memory'][:len(read)], read)
+                     and all(np.array_equal(row[None], calls[-1][2]) for row in episode['memory'][len(read):]))
     # The episode keeps an action in the agent's half digits, so the last digits of the two can differ.
     action_gap = float(np.abs(np.concatenate([action for _, action, _ in calls])[:entries] - episode['action'][:entries]).max())
     held_to('remembered', carried and saved_as_read and action_gap < 1e-3 and not episode['memory'][0].any(),

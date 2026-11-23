@@ -23,8 +23,10 @@ changed and the agent never sees it.
 
 Why it is built this way:
 
-  The value is the mean over all of the agent's Q-networks. TD-MPC2 itself reads two of
-  them drawn at random, which would give the same state two values.
+  The value is the mean over all of the agent's Q-networks, with their dropout off.
+  TD-MPC2 itself reads two of them drawn at random, and its Q-networks keep their dropout
+  on when the agent plays: they are held as a copy that model.eval() never reaches. Either
+  would give the same state a different value each time it is asked.
 
   In imagined rolls the proposal is the middle of the policy network's choice, not a draw
   from it. The planner that plays for real ends close to one action, and the policy
@@ -32,6 +34,12 @@ Why it is built this way:
 
   The adapter is worked out without touching the random numbers the planner draws from,
   so an adapter at zero weights replays the unadapted agent's episode exactly.
+
+  TD-MPC2's arithmetic is written in TorchScript, which runs a function as written the
+  first times it is called and then swaps in a faster version whose last digits differ.
+  Which decisions get which depends on everything worked out before them, the adapter's
+  look-ahead included, so a seed would not give the same episode twice. The swap is
+  switched off, for everything PyTorch runs in this process.
 
   The planner starts each plan from its last one, moved on by a decision, and is not told
   the action that was taken. With an adapter that plan was made for an action the robot
@@ -85,6 +93,22 @@ class FrozenTDMPC2:
         self._torch = torch
         self._agent, self._model, self._cfg = agent, agent.model, agent.cfg
         self._random = np.random.default_rng(0)
+        # TorchScript runs every function as it was written, every time (see the top of this file).
+        torch._C._set_graph_executor_optimize(False)
+
+        # One Q-network as the agent builds it, with its dropout off, to run the agent's
+        # own weights through. The agent keeps the weights of all its Q-networks stacked,
+        # in the order the network names them.
+        from common import layers
+        cfg = self._cfg
+        one = layers.mlp(cfg.latent_dim + cfg.action_dim + cfg.task_dim, 2 * [cfg.mlp_dim], max(cfg.num_bins, 1),
+                         dropout=cfg.dropout).to(agent.device).eval()
+        named = list(one.named_parameters())
+        stacked = list(self._model._Qs.params)
+        if len(named) != len(stacked) or any(have.shape[1:] != want.shape for have, (_, want) in zip(stacked, named)):
+            raise SystemExit('the Q-networks of this TD-MPC2 are not built the way frozen_tdmpc2.py rebuilds them')
+        self._q_names = [name for name, _ in named]
+        self._q = torch.vmap(lambda weights, together: torch.func.functional_call(one, weights, (together,)), in_dims=(0, None))
 
     @property
     def xp(self):
@@ -110,6 +134,15 @@ class FrozenTDMPC2:
 
     def worth(self, state):
         """The agent's estimate of the discounted reward still to come from `state`: its Q-networks at its policy network's action."""
+        action = self._model.pi(state['z'], None)[0]
+        weights = dict(zip(self._q_names, self._model._Qs.params))
+        return self._scalar(self._q(weights, self._torch.cat([state['z'], action], -1))).mean(0)
+
+    def worth_as_played(self, state):
+        """The same estimate with the dropout the agent's Q-networks have when it plays, so two calls differ.
+
+        Only check_memory.py asks for it, to see that worth() is the same networks.
+        """
         action = self._model.pi(state['z'], None)[0]
         return self._scalar(self._model.Q(state['z'], action, None, return_type='all')).mean(0)
 
