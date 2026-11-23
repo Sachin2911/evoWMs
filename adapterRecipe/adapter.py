@@ -68,7 +68,7 @@ Why it is built this way:
 
 import numpy as np
 
-from look_ahead import futures, hold, names, numbers_of
+from look_ahead import LENGTHS, futures, held, hold, hold_by_stretch, names, names_by_stretch, numbers_by_stretch, numbers_of, squashed
 
 FORMS = ('residual', 're-rank', 'mix')
 SIZES = ('tens', 'hundreds', 'thousands')
@@ -91,21 +91,27 @@ def steering(action_numbers):
 
 def save(path, adapter, weights, fixed):
     """Saves an adapter with its weights and with what it needs besides them, as one .npz file."""
-    predictor = fixed['predictor']
-    np.savez(path, form=adapter.form, size=adapter.size or '', decisions=adapter.decisions, push=adapter.push,
-             hidden=adapter.hidden, mixtures=adapter.mixtures, weights=np.asarray(weights, np.float32),
-             sizes=fixed['sizes'], predictor_weights=predictor['weights'], predictor_offset=predictor['offset'],
-             predictor_mean_cost=predictor['mean_cost'])
+    settings = {'form': adapter.form, 'weights': np.asarray(weights, np.float32), 'sizes': fixed['sizes']}
+    if adapter.form == 'memory':
+        settings.update(lengths=np.array(adapter.lengths), memory=adapter.memory, added_on=adapter.added_on, stop=adapter.stop)
+    else:
+        settings.update(size=adapter.size or '', decisions=adapter.decisions, push=adapter.push,
+                        hidden=adapter.hidden, mixtures=adapter.mixtures)
+    # Every array of the cost predictor is saved under its own name, with predictor_ in front.
+    np.savez(path, **settings, **{f'predictor_{name}': value for name, value in fixed['predictor'].items()})
 
 
-def load(path, action_numbers, state_numbers):
+def load(path, action_numbers, state_numbers=None):
     """Reads what save() wrote: the adapter, its weights, and the cost predictor and sizes it works with."""
     saved = np.load(path)
-    adapter = Adapter(str(saved['form']), str(saved['size']) or None, action_numbers, state_numbers,
-                      int(saved['decisions']), float(saved['push']), int(saved['hidden']), int(saved['mixtures']))
-    fixed = {'predictor': {'weights': saved['predictor_weights'], 'offset': saved['predictor_offset'],
-                           'mean_cost': saved['predictor_mean_cost']}, 'sizes': saved['sizes']}
-    return adapter, saved['weights'], fixed
+    if str(saved['form']) == 'memory':
+        adapter = MemoryAdapter(action_numbers, tuple(int(length) for length in saved['lengths']),
+                                bool(saved['memory']), bool(saved['added_on']), bool(saved['stop']))
+    else:
+        adapter = Adapter(str(saved['form']), str(saved['size']) or None, action_numbers, state_numbers,
+                          int(saved['decisions']), float(saved['push']), int(saved['hidden']), int(saved['mixtures']))
+    predictor = {name[len('predictor_'):]: saved[name] for name in saved.files if name.startswith('predictor_')}
+    return adapter, saved['weights'], {'predictor': predictor, 'sizes': saved['sizes']}
 
 
 class Adapter:
@@ -249,5 +255,142 @@ class Adapter:
         def adapt(state, proposed, fixed, weights):
             worked_out = self.decide(frozen, fixed, weights, state, proposed)
             return worked_out if everything else worked_out['action']
+
+        return frozen.compiled(adapt)
+
+
+class MemoryAdapter:
+    """The adapter of implementation/adapterArchitecture.md: a gain and a shift per action number, with memory.
+
+    At every decision it reads the look-ahead numbers by stretch (look_ahead.py), squashed,
+    and a memory of its own last outputs. One layer turns them into a gain and a shift for
+    every action number, each between -1 and 1, and the action taken is
+
+        proposed x (1 + gain) + shift
+
+    clipped to the limits of the action. The memory is a fading average of the outputs,
+    one number per output, and how fast each fades is one of the weights.
+
+    action_numbers   how many numbers an action has (A)
+    lengths          where the stretches of the look-ahead end, in decisions
+    memory           False leaves the memory out, to see what it adds
+    added_on         True gives every output a weight that is added on whatever the inputs
+                     are, to see what leaving those out costs
+    stop             False leaves the stopped action out of the look-ahead
+
+    The weights come as one row of `count` numbers: a table with one line per output, the
+    gains first and then the shifts, and after it the fade weights. A line has one weight
+    per look-ahead number in the order of look_ahead.names_by_stretch(), then one per
+    memory number, then the added-on weight if there is one. For two action numbers that
+    is 4 x (33 + 4) + 4 = 152 weights, and for four 528.
+
+    With every weight at zero the output is zero, the memory stays zero, and the action
+    is the proposed one, handed back as the agent gave it.
+
+    It is written with the frozen agent's own array functions (frozen.xp), so the same
+    lines run on DreamerV3 and on TD-MPC2.
+    """
+
+    form = 'memory'
+    size = None
+
+    def __init__(self, action_numbers, lengths=LENGTHS, memory=True, added_on=False, stop=True):
+        self.action_numbers = action_numbers
+        self.lengths = tuple(int(length) for length in lengths)
+        self.memory, self.added_on, self.stop = bool(memory), bool(added_on), bool(stop)
+        self.outputs = 2 * action_numbers
+        self.inputs = len(self.lengths) * (4 * action_numbers + (3 if self.stop else 1))
+        self.remembered = self.outputs if self.memory else 0
+        self._columns = self.inputs + self.remembered + int(self.added_on)
+        self._in_table = self.outputs * self._columns
+        self.count = self._in_table + self.remembered
+
+    def describe(self):
+        """The settings and the number of weights, for the record of a run."""
+        return {'form': self.form, 'weights': self.count, 'lengths': list(self.lengths), 'memory': self.memory,
+                'added-on weights': self.added_on, 'stopped action': self.stop}
+
+    def names(self):
+        """What each column of the table reads, in order."""
+        called = names_by_stretch(self.action_numbers, self.lengths, self.stop)
+        called += [f'memory of {kind} {number}' for kind in ('gain', 'shift') for number in range(self.action_numbers)]
+        return called[:self.inputs + self.remembered] + (['added on'] if self.added_on else [])
+
+    def table(self, weights):
+        """The table part of a row of weights: one line per output, one column per thing read."""
+        return np.asarray(weights)[:self._in_table].reshape(self.outputs, self._columns)
+
+    def start(self, states=1):
+        """The memory at the start of an episode, for `states` states. It has one column even with no memory, which is never read."""
+        return np.zeros((states, max(self.remembered, 1)), np.float32)
+
+    def steering(self, scale=1.0):
+        """Weights that steer by hand in this form: each action number is shifted towards the push expected to cost less.
+
+        It reads the cost changes of the two pushes in every stretch and uses nothing
+        else: no gain, no reward, no stopped action and no memory.
+        """
+        called = self.names()
+        table = np.zeros((self.outputs, self._columns), np.float32)
+        for number in range(self.action_numbers):
+            for column, name in enumerate(called):
+                if name.startswith(f'cost change, number {number} up'):
+                    table[self.action_numbers + number, column] = -scale
+                if name.startswith(f'cost change, number {number} down'):
+                    table[self.action_numbers + number, column] = scale
+        return np.concatenate([table.ravel(), np.zeros(self.remembered, np.float32)])
+
+    def decide(self, frozen, fixed, weights, state, proposed, memory):
+        """The action to take in every state of a batch, and the memory to carry to the next decision.
+
+        fixed      what is measured and never searched: `predictor`, the cost predictor,
+                   and `sizes`, from look_ahead.sizes_by_stretch()
+        weights    the adapter's `count` weights, in one row
+        state      the internal states, one row each
+        proposed   the action the frozen agent proposed in each
+        memory     the memory at this decision, one row per state; start() gives the first
+
+        Returns `action`, `memory` for the next decision, and `output`: the gains and
+        then the shifts.
+        """
+        xp = frozen.xp
+        if tuple(weights.shape) != (self.count,):
+            raise ValueError(f'this adapter has {self.count} weights, and was given an array of shape {tuple(weights.shape)}')
+        state = {name: state[name] for name in frozen.names}
+        proposed = frozen.as_float(proposed)
+        clipped = xp.clip(proposed, -1, 1)
+        imagined = hold_by_stretch(frozen, fixed['predictor'], state, held(frozen, proposed, self.stop), self.lengths)
+        inputs = squashed(xp, numbers_by_stretch(frozen, imagined), fixed['sizes'])
+
+        table = weights[:self._in_table].reshape(self.outputs, self._columns)
+        summed = inputs @ table[:, :self.inputs].T
+        if self.remembered:
+            summed = summed + memory @ table[:, self.inputs:self.inputs + self.remembered].T
+        if self.added_on:
+            summed = summed + table[:, -1]
+        # tanh is the ceiling inside the loop: without it a memory that feeds on itself grows without limit.
+        output = xp.tanh(summed)
+        gain, shift = output[:, :self.action_numbers], output[:, self.action_numbers:]
+        moved = xp.clip(clipped * (1 + gain) + shift, -1, 1)
+        # A number that is left where it was is handed back as the agent gave it.
+        action = xp.where(moved == clipped, proposed, moved)
+        if self.remembered:
+            fade = 1 / (1 + xp.exp(-weights[self._in_table:]))
+            memory = (1 - fade) * memory + fade * output
+        return {'action': action, 'memory': memory, 'output': output}
+
+    def compiled(self, frozen, everything=False):
+        """This adapter as a function of plain arrays, called as (state, proposed, memory, fixed, weights).
+
+        It gives the action to take and the next memory, or with `everything` all that
+        decide() returns. Player.play takes it with the weights filled in:
+
+            act = adapter.compiled(frozen)
+            player.play(seeds, adapter=lambda state, proposed, memory: act(state, proposed, memory, fixed, weights),
+                        memory=adapter.start())
+        """
+        def adapt(state, proposed, memory, fixed, weights):
+            worked_out = self.decide(frozen, fixed, weights, state, proposed, memory)
+            return worked_out if everything else (worked_out['action'], worked_out['memory'])
 
         return frozen.compiled(adapt)

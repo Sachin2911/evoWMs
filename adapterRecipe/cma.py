@@ -7,6 +7,11 @@ the candidates to try and tell() takes how good each one was, a higher score bei
 CMA-ES keeps a centre, a step size and a table of how the numbers vary together. It draws
 its candidates around the centre, and moves all three towards the better candidates. It is
 written after Hansen's tutorial (2016) and uses the settings given there.
+
+With `diagonal` the table keeps one number per number searched and none for pairs of them
+(Ros and Hansen 2008). It then learns about (n + 2) / 3 times faster, which is the form
+for several hundred weights: the full table of 528 weights takes tens of thousands of
+generations to follow the candidates.
 """
 
 import numpy as np
@@ -15,8 +20,9 @@ import numpy as np
 class CMA:
     """CMA-ES from `centre`, with candidates first spread by `step` around it."""
 
-    def __init__(self, centre, step, candidates=None, seed=0):
+    def __init__(self, centre, step, candidates=None, seed=0, diagonal=False):
         n = len(centre)
+        self._diagonal = diagonal
         self.centre = np.asarray(centre, np.float64).copy()
         self.step = float(step)
         self.candidates = candidates or 4 + int(3 * np.log(n))
@@ -31,17 +37,25 @@ class CMA:
         self._step_rate = (effective + 2) / (n + effective + 5)
         self._one_rate = 2 / ((n + 1.3) ** 2 + effective)
         self._many_rate = min(1 - self._one_rate, 2 * (effective - 2 + 1 / effective) / ((n + 2) ** 2 + effective))
+        if diagonal:
+            # One number per weight is far less to learn, so it can be learned faster.
+            faster = (n + 2) / 3
+            self._one_rate = min(1.0, self._one_rate * faster)
+            self._many_rate = min(1 - self._one_rate, self._many_rate * faster)
         self._damping = 1 + 2 * max(0.0, np.sqrt((effective - 1) / (n + 1)) - 1) + self._step_rate
         # The length a row of n random numbers has on average.
         self._expected = np.sqrt(n) * (1 - 1 / (4 * n) + 1 / (21 * n ** 2))
         self._path, self._step_path = np.zeros(n), np.zeros(n)
-        self._table = np.eye(n)
+        self._table = np.ones(n) if diagonal else np.eye(n)
         self._generation = 0
         self._random = np.random.default_rng(seed)
         self._take_apart()
 
     def _take_apart(self):
         """Splits the table into its directions and how far it reaches along each."""
+        if self._diagonal:
+            self._reach = np.sqrt(np.maximum(self._table, 1e-20))
+            return
         self._table = (self._table + self._table.T) / 2
         reach, self._directions = np.linalg.eigh(self._table)
         self._reach = np.sqrt(np.maximum(reach, 1e-20))
@@ -49,7 +63,7 @@ class CMA:
     def ask(self):
         """The candidates of this generation, one row each."""
         draws = self._random.standard_normal((self.candidates, len(self.centre)))
-        self._moves = (draws * self._reach) @ self._directions.T
+        self._moves = draws * self._reach if self._diagonal else (draws * self._reach) @ self._directions.T
         return self.centre + self.step * self._moves
 
     def tell(self, scores):
@@ -61,7 +75,7 @@ class CMA:
         self.centre = self.centre + self.step * move
         self._generation += 1
 
-        whitened = self._directions @ ((self._directions.T @ move) / self._reach)
+        whitened = move / self._reach if self._diagonal else self._directions @ ((self._directions.T @ move) / self._reach)
         self._step_path = ((1 - self._step_rate) * self._step_path
                            + np.sqrt(self._step_rate * (2 - self._step_rate) * self._effective) * whitened)
         length = np.linalg.norm(self._step_path)
@@ -69,8 +83,12 @@ class CMA:
         steady = length / np.sqrt(1 - (1 - self._step_rate) ** (2 * self._generation)) / self._expected < 1.4 + 2 / (n + 1)
         self._path = ((1 - self._path_rate) * self._path
                       + steady * np.sqrt(self._path_rate * (2 - self._path_rate) * self._effective) * move)
-        from_path = np.outer(self._path, self._path) + (1 - steady) * self._path_rate * (2 - self._path_rate) * self._table
-        from_candidates = (moves * self._weights[:, None]).T @ moves
+        if self._diagonal:
+            from_path = self._path ** 2 + (1 - steady) * self._path_rate * (2 - self._path_rate) * self._table
+            from_candidates = self._weights @ moves ** 2
+        else:
+            from_path = np.outer(self._path, self._path) + (1 - steady) * self._path_rate * (2 - self._path_rate) * self._table
+            from_candidates = (moves * self._weights[:, None]).T @ moves
         self._table = ((1 - self._one_rate - self._many_rate) * self._table
                        + self._one_rate * from_path + self._many_rate * from_candidates)
         self.step *= np.exp(self._step_rate / self._damping * (length / self._expected - 1))

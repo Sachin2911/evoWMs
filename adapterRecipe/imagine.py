@@ -33,8 +33,8 @@ Why it is built this way:
 
 import numpy as np
 
-from cost_predictor import expected_cost
 from episodes import states
+from look_ahead import expected
 
 
 def starting_states(files, count, room, seed=0):
@@ -73,8 +73,8 @@ def starting_states(files, count, room, seed=0):
 class Imagination:
     """Imagined rolls for one kind of adapter, all from the same starting states.
 
-    frozen     the frozen agent, a FrozenDreamer
-    adapter    an adapter.Adapter
+    frozen     the frozen agent, a FrozenDreamer or a FrozenTDMPC2
+    adapter    an adapter.Adapter or an adapter.MemoryAdapter
     fixed      what the adapter needs besides its weights: the cost predictor and the sizes
     state      the starting states
     sample     True: the proposed action and the next state are random draws.
@@ -82,49 +82,66 @@ class Imagination:
     """
 
     def __init__(self, frozen, adapter, fixed, state, sample=True):
-        import jax.numpy as jnp
+        remembers = adapter.form == 'memory'
 
-        def decision(state, fixed, weights):
+        def decision(state, memory, fixed, weights):
+            xp = frozen.xp
+            state = {name: state[name] for name in frozen.names}
             proposed = frozen.propose(state, sample=sample)
-            action = adapter.decide(frozen, fixed, weights, state, proposed)['action']
-            following = frozen.roll_forward(state, action, sample=sample)
-            following = {name: following[name] for name in ('deter', 'stoch')}
+            if remembers:
+                made = adapter.decide(frozen, fixed, weights, state, proposed, memory)
+                action, memory = made['action'], made['memory']
+            else:
+                action = adapter.decide(frozen, fixed, weights, state, proposed)['action']
+            following, reward = frozen.step(state, action, sample=sample)
+            # The simulator and the world model clip an action, so it is the clipped ones that are compared.
+            taken, offered = xp.clip(frozen.as_float(action), -1, 1), xp.clip(frozen.as_float(proposed), -1, 1)
             return {
                 'state': following,
-                'cost': expected_cost(fixed['predictor'], frozen.numbers(following)),
-                'reward': frozen.reward(following).astype(jnp.float32),
-                'value': frozen.value(following).astype(jnp.float32),
-                # The simulator and the world model clip an action, so it is the clipped ones that are compared.
-                'moved': (jnp.clip(action, -1, 1) != jnp.clip(proposed, -1, 1)).any(-1),
+                'memory': memory,
+                'cost': expected(xp, fixed['predictor'], frozen.numbers(following)),
+                'reward': reward,
+                'value': frozen.worth(following),
+                'moved': (taken != offered).any(-1),
+                # How large the action taken is and how large the proposed one was, for the share of its size that is kept.
+                'size taken': (taken ** 2).sum(-1) ** 0.5,
+                'size proposed': (offered ** 2).sum(-1) ** 0.5,
             }
 
-        self._frozen, self._fixed, self._state = frozen, fixed, state
+        self._frozen, self._adapter, self._fixed, self._state = frozen, adapter, fixed, state
         self._decision = frozen.compiled(decision)
 
-    def roll(self, weights, decisions, seed=0, state=None, fixed=None):
+    def roll(self, weights, decisions, seed=0, state=None, fixed=None, memory=None):
         """Imagines `decisions` decisions from every starting state, with the adapter at `weights`.
 
         `state` and `fixed`, if given, take the place of the starting states and of the
         cost predictor and sizes that this Imagination was made with. A search uses them
         to start each generation somewhere new and to bring in a retrained predictor.
-        Starting states of the same number as before need no new compiling.
+        Starting states of the same number as before need no new compiling. `memory` is
+        the memory each roll starts with, one row per starting state; left out, every
+        roll starts with an empty one.
 
-        Returns four arrays with one row per decision and one column per starting state:
+        Returns arrays with one row per decision and one column per starting state:
 
-            cost      the expected cost of arriving in the state that follows the decision
-            reward    the reward predicted for arriving there
-            value     the agent's own estimate of the reward still to come from there
-            moved     whether the adapter changed the action
+            cost            the expected cost of arriving in the state that follows the decision
+            reward          the reward predicted for arriving there
+            value           the agent's own estimate of the reward still to come from there
+            moved           whether the adapter changed the action
+            size taken      the length of the action taken, and
+            size proposed   of the action the agent proposed
         """
         # Each imagined decision takes its random numbers from the frozen agent's own
         # source for adapters, which this sets to the same place for every roll.
         self._frozen.reseed(seed)
         state = self._state if state is None else state
         fixed = self._fixed if fixed is None else fixed
-        kept = {name: [] for name in ('cost', 'reward', 'value', 'moved')}
+        states = len(next(iter(state.values())))
+        if memory is None:
+            memory = self._adapter.start(states) if self._adapter.form == 'memory' else np.zeros((states, 1), np.float32)
+        kept = {name: [] for name in ('cost', 'reward', 'value', 'moved', 'size taken', 'size proposed')}
         for _ in range(decisions):
-            came = self._decision(state, fixed, weights)
-            state = came['state']
+            came = self._decision(state, memory, fixed, weights)
+            state, memory = came['state'], came['memory']
             for name, rows in kept.items():
                 rows.append(came[name])
         return {name: np.stack(rows) for name, rows in kept.items()}

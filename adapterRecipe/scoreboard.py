@@ -9,7 +9,9 @@ safeDreamerBaselines/evaluate.py --first-seed 5000.
 What is played is chosen with --kind:
 
     none        the frozen agent alone
-    steering    the hand-written adapter (adapter.steering), with its weights times --scale
+    steering    the hand-written adapter (adapter.steering), with its weights times --scale.
+                With --form memory it is written in the form of the adapter with memory
+                (MemoryAdapter.steering), which reads the look-ahead by stretches
     re-rank     the re-rank over pushed actions, with --reward-weight and --cost-weight
     saved       an adapter saved by adapter.save, given with --adapter
 
@@ -46,7 +48,7 @@ import numpy as np
 import adapter as adapters
 from cost_predictor import files_of, read
 from episodes import Player, make_folder, save, states
-from look_ahead import look_ahead, sizes
+from look_ahead import look_ahead, measured_by_stretch, sizes
 
 COST_LIMIT = 2    # SafeDreamer's: the highest mean cost of an episode that counts as safe
 
@@ -77,6 +79,7 @@ def main():
     parser.add_argument('--predictor', help='a cost_predictor.npz, for every kind but `saved`')
     parser.add_argument('--adapter', help='a file written by adapter.save, for kind `saved`')
     parser.add_argument('--scale', type=float, default=1.0, help='steering: what its weights are multiplied by')
+    parser.add_argument('--form', default='residual', choices=('residual', 'memory'), help='steering: the form it is written in')
     parser.add_argument('--reward-weight', type=float, default=0.0, help='re-rank: the weight of a reward change')
     parser.add_argument('--cost-weight', type=float, default=1.0, help='re-rank: the weight of a cost change')
     parser.add_argument('--decisions', type=int, default=10, help='how many decisions the look-ahead lasts')
@@ -98,6 +101,16 @@ def main():
         state_numbers = int(probe['predictor_weights'].shape[0])
         adapter, weights, fixed = adapters.load(args.adapter, action_numbers, state_numbers)
         described.update({'adapter file': args.adapter, **adapter.describe()})
+    elif args.kind == 'steering' and args.form == 'memory':
+        predictor, trained, _ = read(args.predictor, args.checkpoint)
+        for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
+        adapter = adapters.MemoryAdapter(action_numbers)
+        fixed = {'predictor': for_gpu,
+                 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'), adapter.lengths, adapter.stop)}
+        weights = adapter.steering(args.scale)
+        described.update({
+            'scale': args.scale, 'predictor': args.predictor, **adapter.describe(),
+            'episodes behind the predictor': trained['files']['training'][2] + trained['files']['validation'][2]})
     elif args.kind != 'none':
         predictor, trained, _ = read(args.predictor, args.checkpoint)
         for_gpu = {name: predictor[name] for name in ('weights', 'offset', 'mean_cost')}
@@ -117,18 +130,25 @@ def main():
             # The real episodes the predictor was trained and set on are part of what this adapter cost.
             'episodes behind the predictor': trained['files']['training'][2] + trained['files']['validation'][2],
             'sizes': [float(size) for size in fixed['sizes']]})
+    memory = None
     if args.kind != 'none':
         compiled = adapter.compiled(frozen)
+        weights = np.asarray(weights, np.float32)
+        if adapter.form == 'memory':
+            memory = adapter.start()
 
-        def act(state, proposed):
-            return compiled(state, proposed, fixed, weights)
+            def act(state, proposed, held):
+                return compiled(state, proposed, held, fixed, weights)
+        else:
+            def act(state, proposed):
+                return compiled(state, proposed, fixed, weights)
 
     seeds = list(range(args.first_seed, args.first_seed + args.episodes))
     if args.keep:
         make_folder(out / 'episodes')
     started = time.perf_counter()
     rows, by_decision = [], {}
-    for number, episode in enumerate(player.play(seeds, adapter=act)):
+    for number, episode in enumerate(player.play(seeds, adapter=act, memory=memory)):
         if number < args.keep:
             save(episode, out / 'episodes')
         moved = (np.clip(episode['action'], -1, 1) != np.clip(episode['proposed'], -1, 1)).any(1)

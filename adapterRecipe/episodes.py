@@ -7,6 +7,7 @@ made on seeing observation t:
                    numbers, and its 48 categorical choices as the number of each choice
     proposed       the action the frozen agent proposed
     action         the action taken, which is the same unless an adapter changed it
+    memory         with an adapter that has a memory: the memory it read at this decision
     reward, cost   what came with observation t. They are the result of the action of
                    entry t - 1, added up over the simulator steps that one decision lasts
 
@@ -79,6 +80,7 @@ class Player:
         self._env = embodied.BatchEnv(
             [safedreamer_train.wrap_env(simulator_wrapper, config)], parallel=False)
         self.act_space = self._env.act_space
+        self.action_numbers = int(self._env.act_space['action'].shape[0])
         self.agent = agt.Agent(self._env.obs_space, self._env.act_space, embodied.Counter(), config)
         load_checkpoint(self.agent, checkpoint)
         self.frozen = FrozenDreamer(self.agent)
@@ -179,20 +181,31 @@ class Player:
             self._simulator_wrapper._render = drawn
         return np.array(rewards, np.float32), np.array(costs, np.float32)
 
-    def play(self, seeds, adapter=None):
+    def play(self, seeds, adapter=None, memory=None):
         """Plays one episode per seed, with `adapter` if given, and hands each over as soon as it ends.
 
         An adapter is called as adapter(state, proposed) and returns the action to take; see
-        FrozenDreamer.policy. Each episode comes back as the arrays described at the top of
-        this file.
+        FrozenDreamer.policy. An adapter with a memory is given with `memory`, the memory
+        an episode starts with (MemoryAdapter.start()). It is then called as
+        adapter(state, proposed, memory) and returns the action and the next memory, which
+        is carried to the next decision of the episode and no further. Each episode comes
+        back as the arrays described at the top of this file.
         """
         for seed in seeds:
-            seen, proposals = [], []
+            seen, proposals, memories = [], [], []
+            carried = memory
 
             def recording(state, proposed):
+                nonlocal carried
                 seen.append(state)
                 proposals.append(proposed)
-                return proposed if adapter is None else adapter(state, proposed)
+                if adapter is None:
+                    return proposed
+                if memory is None:
+                    return adapter(state, proposed)
+                memories.append(carried)
+                action, carried = adapter(state, proposed, carried)
+                return action
 
             started = time.perf_counter()
             played, = self.run(lambda *inputs: self.frozen.policy(*inputs, adapter=recording), [seed])
@@ -209,6 +222,8 @@ class Player:
                 'cost': played['cost'],
                 'seconds': round(time.perf_counter() - started, 1),
             }
+            if memories:
+                episode['memory'] = np.concatenate(memories).astype(np.float32)
             if not np.array_equal(states(episode)['stoch'], written_out):
                 raise SystemExit('a categorical choice was not exactly zeros and a one, so saving its number loses something')
             if self.watch:

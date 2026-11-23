@@ -6,9 +6,19 @@
     value(state)                  its estimate of the reward still to come from `state`
     propose(state)                the action the agent's actor takes in `state`
 
-The recipe reads the agent through these and nothing else, so that it can later be put on
+The recipe reads the agent through these and nothing else, so that it can be put on
 TD-MPC2 by writing the same five for that agent (brainStorming/adapterRecipeDesign.md,
-decision 1).
+decision 1). frozen_tdmpc2.py does that, and what the two share is this:
+
+    xp                            the array functions the pieces work with (jax.numpy here)
+    step(state, action)           roll_forward and reward in one: the state that follows,
+                                  and the reward predicted for the decision
+    value(state)                  as above, as ordinary numbers
+    propose(state)                as above
+    numbers(state)                the state as one row of numbers
+    compiled(function)            `function`, written with the pieces, for plain arrays
+    kept(episode)                 the states of a saved episode, in the small form they are
+                                  saved in, and written_out() to hand them to the pieces
 
 Nothing here changes the agent. Its weights are read and never written, and when it plays
 it is called exactly as safeDreamerBaselines/evaluate.py calls it. An adapter is applied
@@ -58,6 +68,45 @@ class FrozenDreamer:
     def reward(self, state):
         """The reward the world model predicts for the decision that led to `state`."""
         return self._reward(state).mean()
+
+    @property
+    def xp(self):
+        """The array functions the pieces work with. The adapter with memory is written with these."""
+        import jax.numpy as jnp
+        return jnp
+
+    def as_float(self, array):
+        """`array` as ordinary numbers. The agent itself computes in half the digits."""
+        import jax.numpy as jnp
+        return array.astype(jnp.float32)
+
+    def step(self, state, action, sample=True):
+        """One decision in the world model: the state that follows `action`, and the reward predicted for it."""
+        following = self.roll_forward(state, action, sample)
+        following = {name: following[name] for name in ('deter', 'stoch')}
+        return following, self.as_float(self.reward(following))
+
+    def worth(self, state):
+        """value(), as ordinary numbers."""
+        return self.as_float(self.value(state))
+
+    # A saved episode keeps each categorical choice as its number. These turn the states
+    # of an episode into that small form, and back into what the pieces take.
+
+    names = ('deter', 'stoch')
+
+    def kept(self, episode, entries=slice(None)):
+        """The states at the chosen entries of a saved episode, in the small form they are saved in."""
+        return {'deter': episode['deter'][entries], 'stoch': episode['stoch'][entries]}
+
+    def written_out(self, kept):
+        """States in the small form, as the pieces take them: every choice written out as zeros and a one."""
+        return {'deter': kept['deter'], 'stoch': np.eye(self._model._classes, dtype=np.float16)[kept['stoch']]}
+
+    def rows(self, kept):
+        """States in the small form, as the rows of numbers the cost predictor is fitted to."""
+        choices = np.eye(self._model._classes, dtype=np.float32)[kept['stoch']]
+        return np.concatenate([kept['deter'].astype(np.float32), choices.reshape(len(choices), -1)], -1)
 
     def value(self, state):
         """The agent's own estimate of the discounted reward still to come from `state`."""

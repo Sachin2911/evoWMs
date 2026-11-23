@@ -86,9 +86,13 @@ def load(files, ahead):
     for number, file in enumerate(files):
         saved = np.load(file)
         entries, in_window, just_before = windows(saved['cost'], ahead)
-        state = states(saved, entries)
-        numbers.append(np.concatenate(
-            [state['deter'], state['stoch'].reshape(len(entries), -1)], -1).astype(np.float32))
+        if 'z' in saved:
+            # An episode of TD-MPC2: its latent state is one row of numbers already.
+            numbers.append(saved['z'][entries].astype(np.float32))
+        else:
+            state = states(saved, entries)
+            numbers.append(np.concatenate(
+                [state['deter'], state['stoch'].reshape(len(entries), -1)], -1).astype(np.float32))
         amount.append(in_window)
         before.append(just_before)
         episode.append(np.full(len(entries), number))
