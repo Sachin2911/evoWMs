@@ -30,6 +30,9 @@ Why it is built this way:
   from it. The planner that plays for real ends close to one action, and the policy
   network's draws are spread wider than that, because it is trained to stay spread.
 
+  The adapter is worked out without touching the random numbers the planner draws from,
+  so an adapter at zero weights replays the unadapted agent's episode exactly.
+
   The planner starts each plan from its last one, moved on by a decision, and is not told
   the action that was taken. With an adapter that plan was made for an action the robot
   did not take. It is left that way: the planner then plans again from the state the
@@ -142,10 +145,21 @@ class FrozenTDMPC2:
             return value.cpu().numpy()
 
         def call(*inputs):
+            # The planner draws from PyTorch's own random numbers, and so does the policy
+            # network even when only the middle of its choice is read. They are put back
+            # as they were after the call, so that an adapter at zero weights leaves the
+            # planner's draws, and with them the episode, exactly as they would have been.
+            on_cpu = torch.random.get_rng_state()
+            on_gpu = torch.cuda.get_rng_state(device) if torch.device(device).type == 'cuda' else None
             # The random numbers of anything `function` draws follow from reseed(), as in frozen_agent.py.
             torch.manual_seed(int(self._random.integers(2 ** 31 - 1)))
-            with torch.no_grad():
-                return from_device(function(*to_device(inputs)))
+            try:
+                with torch.no_grad():
+                    return from_device(function(*to_device(inputs)))
+            finally:
+                torch.random.set_rng_state(on_cpu)
+                if on_gpu is not None:
+                    torch.cuda.set_rng_state(on_gpu, device)
 
         return call
 
