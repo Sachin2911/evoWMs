@@ -23,6 +23,8 @@
 #
 # Off the cluster (vast.sh), ADAPTER_DATA names the folder that stands in for /datasets/$USER,
 # and ADAPTER_IMAGE=none says that python3 itself has everything and there is no image.
+# ADAPTER_MW_IMAGE=udocker:NAME runs a Meta-World task in the udocker container NAME,
+# which holds TD-MPC2's published image where Apptainer cannot run.
 set -euo pipefail
 
 DATA=${ADAPTER_DATA:-/datasets/$USER}
@@ -46,7 +48,7 @@ if [ -z "$task" ]; then
 fi
 if [ "${task#mw-}" != "$task" ]; then
     checkpoint=$DATA/tdmpc2_checkpoints/metaworld/$task-1.pt
-    IMAGE=${ADAPTER_IMAGE:-$HOME/images/tdmpc2.sif}
+    IMAGE=${ADAPTER_MW_IMAGE:-$HOME/images/tdmpc2.sif}
 elif [ "$variant" = dreamerv3 ]; then
     checkpoint=$(ls "$CHECKPOINTS"/*_dreamerv3_safetygym_Safety"$task"-v0_0.ckpt)
 else
@@ -65,6 +67,14 @@ done
 
 if [ "$IMAGE" = none ]; then
     exec env XLA_PYTHON_CLIENT_PREALLOCATE=false python3 "$script" "${arguments[@]}"
+fi
+if [ "${IMAGE#udocker:}" != "$IMAGE" ]; then
+    # The container sees the same /workspace, starts in this folder, and is told what the
+    # image on the cluster sets (tdmpc2Probe/tdmpc2.def) and where this run's folder is.
+    exec udocker --allow-root run --volume=/workspace --workdir="$PWD" \
+        --env=MUJOCO_PY_FORCE_CPU=1 --env="TDMPC2_DIR=${TDMPC2_DIR:-/workspace/td/tdmpc2}" \
+        --env="MS_RUN_DIR=${MS_RUN_DIR:-.}" --env="CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}" \
+        "${IMAGE#udocker:}" python3 "$script" "${arguments[@]}"
 fi
 # --nv gives the container the node's GPU; --bind makes /datasets visible inside it. Without
 # the preallocation setting, the first of several runs on a node takes all of the GPU's memory.

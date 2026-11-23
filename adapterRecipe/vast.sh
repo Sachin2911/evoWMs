@@ -19,6 +19,8 @@
 #                                        the end of the command, as ms submit --grid does. COMMAND runs in
 #                                        adapterRecipe/, so it is usually: bash on_task.sh SCRIPT.py ...
 #   bash vast.sh status                  how many runs wait, run, are done and have failed
+#   bash vast.sh tdmpc2                  make the container that TD-MPC2's Meta-World tasks run in: its authors'
+#                                        image, pulled with udocker, with TD-MPC2's code and its four checkpoints
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
@@ -36,7 +38,9 @@ export XLA_PYTHON_CLIENT_PREALLOCATE=false TF_FORCE_GPU_ALLOW_GROWTH=true
 # Many runs share the processor, so each keeps its arithmetic to two threads.
 export OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 # on_task.sh and prepare_task.sh: where the data is, and that there is no image to run in.
-export ADAPTER_DATA=$WORK/data ADAPTER_IMAGE=none
+# TD-MPC2's tasks run in a udocker container made from its authors' image (see `tdmpc2`).
+export ADAPTER_DATA=$WORK/data ADAPTER_IMAGE=none ADAPTER_MW_IMAGE=udocker:td
+export UDOCKER_DIR=$WORK/td/udocker TDMPC2_DIR=$WORK/td/tdmpc2
 
 gpus() { nvidia-smi --query-gpu=index --format=csv,noheader | wc -l; }
 
@@ -134,6 +138,8 @@ EOF
         file=$(date +%s%N)-$name-$(printf '%04d' "$number")
         {
             echo "export MS_RUN_DIR=$WORK/runs/$name/task-$(printf '%04d' "$number")"
+            # Workers started by an older copy of this script do not have these.
+            echo "export ADAPTER_MW_IMAGE=$ADAPTER_MW_IMAGE UDOCKER_DIR=$UDOCKER_DIR TDMPC2_DIR=$TDMPC2_DIR"
             echo "cd $REPO/adapterRecipe"
             printf 'exec '; printf '%q ' "$@"; echo "$settings"
         } > "$WORK/workers/$file"
@@ -141,6 +147,30 @@ EOF
         number=$((number + 1))
     done < "$WORK/runs/$name/tasks.txt"
     echo "queued $number runs of $name"
+    ;;
+tdmpc2)
+    # The image holds the versions the released agents were made with, which are hard to
+    # install today (tdmpc2Probe/tdmpc2.def). udocker runs it without Docker or Apptainer.
+    mkdir -p "$WORK/td"
+    python3 -m pip install -q udocker
+    udocker --allow-root install
+    udocker --allow-root pull nicklashansen/tdmpc2:1.0.0
+    udocker --allow-root create --name=td nicklashansen/tdmpc2:1.0.0
+    udocker --allow-root setup --nvidia --force td
+    [ -d "$TDMPC2_DIR" ] || git clone -q https://github.com/nicklashansen/tdmpc2.git "$TDMPC2_DIR"
+    git -C "$TDMPC2_DIR" checkout -q 02b18a48b1c4e4eae0425eada444fafcb43bca0a
+    while read -r checksum path; do
+        target="$ADAPTER_DATA/tdmpc2_checkpoints/$path"
+        if [ -f "$target" ] && echo "$checksum  $target" | sha256sum --check --status; then echo "have  $path"; continue; fi
+        mkdir -p "$(dirname "$target")"
+        curl --fail --location --silent --show-error --retry 3 --output "$target.part" \
+            "https://huggingface.co/nicklashansen/tdmpc2/resolve/8fb2a82efb3bae96941da440128fe1332e4394fd/$path"
+        echo "$checksum  $target.part" | sha256sum --check --status || { echo "checksum mismatch: $path" >&2; exit 1; }
+        mv "$target.part" "$target"
+        echo "got   $path"
+    done < "$REPO/tdmpc2Probe/checkpoints.sha256"
+    udocker --allow-root run --volume=/workspace --workdir="$REPO/tdmpc2Probe" --env=MUJOCO_PY_FORCE_CPU=1 \
+        --env="TDMPC2_DIR=$TDMPC2_DIR" td python3 check_env.py
     ;;
 status)
     echo "waiting $(ls "$WORK/queue" | wc -l), claimed $(ls "$WORK/claimed" | wc -l)"

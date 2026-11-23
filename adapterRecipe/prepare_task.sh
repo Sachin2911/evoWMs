@@ -34,10 +34,11 @@ fi
 collector=episodes.py
 if [ "${task#mw-}" != "$task" ]; then
     collector=frozen_tdmpc2.py
-    IMAGE=${ADAPTER_IMAGE:-$HOME/images/tdmpc2.sif}
+    IMAGE=${ADAPTER_MW_IMAGE:-$HOME/images/tdmpc2.sif}
 fi
 bash on_task.sh "$collector" --episodes 80 --out "$EPISODES/$task" --task="$task"
-if [ "$IMAGE" = none ]; then
+# The predictor needs numpy and scipy alone, which the python3 of a rented machine has.
+if [ "$IMAGE" = none ] || [ "${IMAGE#udocker:}" != "$IMAGE" ]; then
     exec python3 cost_predictor.py --episodes "$EPISODES/$task" --train 20 --out "$PREDICTORS/$task"
 fi
 # The predictor is fitted on the CPU, so the container needs no GPU.
