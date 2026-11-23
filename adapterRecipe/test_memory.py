@@ -438,6 +438,15 @@ class Cells(unittest.TestCase):
         self.assertEqual([member['weights'] for member in archive.near(0.2)], [4])
         # None is near a limit level this low, so a search starts again from the lowest cost level that holds any.
         self.assertEqual([member['weights'] for member in archive.near(0.01)], [4])
+        # A change to the archive counts for less the further its cost level is from the limit level's.
+        at_limit, away = Archive(), Archive()
+        for one in (at_limit, away):
+            one.rebuild([{'weights': 0, 'reward': 1.0, 'cost': 1.0, 'kept': 1.0}])
+        new = [{'weights': 1, 'reward': 0.9, 'cost': 0.3, 'kept': 1.0}, {'weights': 2, 'reward': 0.5, 'cost': 0.04, 'kept': 1.0}]
+        near_scores, _ = at_limit.take_in(new, 0.05)       # the limit level is cost level 4, where the second candidate is
+        self.assertGreater(near_scores[1], near_scores[0])
+        plain_scores, _ = away.take_in(new)
+        self.assertGreater(plain_scores[0], plain_scores[1])
         # Scored again, two can fall into one cell, and one of them goes.
         archive.rebuild([{'weights': 2, 'reward': 1.0, 'cost': 0.4, 'kept': 1.0}, {'weights': 4, 'reward': 0.9, 'cost': 0.3, 'kept': 1.0}])
         self.assertEqual(len(archive), 1)
@@ -453,6 +462,11 @@ class Cells(unittest.TestCase):
         damped = LimitLevel(2, 50, damped=True)
         damped.moved_by(100)
         self.assertAlmostEqual(damped.moved_by(0), 0.04 / 1.5 * 1.5 ** 0.5)
+        # An adapter that played far above the limit level: what it cost for what was imagined is what counts.
+        # Imagined at 0.4 it cost 16, so the limit of 2 lies near 0.4 x 2 / 16 = 0.05, above the level of 0.04.
+        self.assertAlmostEqual(LimitLevel(2, 50).moved_by(16, 0.4), 0.05)
+        # Imagined at 0.4 it cost 2, the limit itself: the level should be 0.4, and goes up as far as it may.
+        self.assertAlmostEqual(LimitLevel(2, 50).moved_by(2, 0.4), 0.06)
 
 
 if __name__ == '__main__':

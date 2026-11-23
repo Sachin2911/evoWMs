@@ -31,10 +31,17 @@ Why it is built this way:
   rewarded for every cell, the redirecting ones among them.
 
   Being told that alone, a search has no reason to go down in cost: it is rewarded as
-  much for a little more reward in a cell far above the limit. So a search starts again,
-  after every round of real episodes, from an adapter near the limit level (near()).
-  The starts are what take the archive down to the limit, and what it is told spreads it
-  over the manners of acting there.
+  much for a little more reward in a cell far above the limit. Two things give it one.
+  A change to the archive counts for less the further its cost level is from the limit
+  level's, so the cells that decide the outcome are worth the most, whatever their
+  manner. And a search starts again, after every round of real episodes, from an
+  adapter near the limit level (near()).
+
+  The limit level moves on the adapter that played: on its imagined cost and its real
+  cost together. The adapter that plays is often not at the limit level, most of all
+  early on, when nothing in the archive is that low and the one with the least cost
+  plays. Its real cost then says nothing about the limit level by itself, but what it
+  cost for what was imagined does.
 """
 
 import numpy as np
@@ -78,23 +85,26 @@ class Archive:
             return True
         return False
 
-    def take_in(self, candidates):
+    def take_in(self, candidates, limit_level=None):
         """Offers a generation's candidates to the archive; returns what the search is told about each.
 
         The score of a candidate is higher the more it changed the archive: 2,000 and its
         reward if it filled a cell that was empty before this generation, 1,000 and its
         lead if it beat the adapter that held its cell, and otherwise how far it fell
-        short, which is below zero. The second number of what comes back is how many
-        candidates the archive kept.
+        short, which is below zero. With `limit_level`, a change to the archive loses 100
+        for every cost level between its cell and the limit level's. The second number
+        of what comes back is how many candidates the archive kept.
         """
         before = {cell: member['reward'] for cell, member in self.members.items()}
+        target = None if limit_level is None else cell_of(limit_level, 1.0)[0]
         scores, added = [], 0
         for candidate in candidates:
             cell = cell_of(candidate['cost'], candidate['kept'])
+            away = 0 if target is None else 100 * abs(cell[0] - target)
             if cell not in before:
-                scores.append(2000 + candidate['reward'])
+                scores.append(2000 - away + candidate['reward'])
             elif candidate['reward'] > before[cell]:
-                scores.append(1000 + candidate['reward'] - before[cell])
+                scores.append(1000 - away + candidate['reward'] - before[cell])
             else:
                 scores.append(candidate['reward'] - before[cell])
             added += self._offer(candidate)
@@ -133,24 +143,31 @@ class LimitLevel:
     """The imagined cost level that real episodes say matches the cost limit.
 
     It starts at the limit as a share of the unadapted agent's real cost. After each round
-    of real episodes it moves by the ratio of the limit to the real cost of the adapter
-    that played, by no more than a factor of `most`: down if those episodes cost more than
-    the limit, up if less. With `damped`, that factor shrinks to its square root each time
-    the real cost crosses the limit, so the level settles and does not swing.
+    of real episodes it moves towards the level those episodes point to: the imagined
+    cost level of the adapter that played, times the ratio of the limit to its real cost.
+    For an adapter that sits at the limit level that is the level times that ratio. It
+    moves by no more than a factor of `most` at a time. With `damped`, that factor
+    shrinks to its square root each time the level changes direction, so it settles and
+    does not swing.
     """
 
     def __init__(self, limit, unadapted_cost, most=1.5, damped=False):
         self.limit = limit
         self.level = min(1.0, limit / unadapted_cost) if unadapted_cost > 0 else 1.0
         self.most, self.damped = most, damped
-        self._was_beyond = None
+        self._went_up = None
 
-    def moved_by(self, real_cost):
-        """Takes the real cost of the adapter that played; returns the new level."""
-        beyond = real_cost > self.limit
-        if self.damped and self._was_beyond is not None and beyond != self._was_beyond:
+    def moved_by(self, real_cost, imagined_level=None):
+        """Takes the real cost of the adapter that played, and its imagined cost level; returns the new level.
+
+        Without an imagined cost level the adapter is taken to sit at the limit level.
+        """
+        played_at = self.level if imagined_level is None else imagined_level
+        # The level these episodes point to, as a multiple of the level now.
+        ratio = self.most if real_cost <= 0 else played_at * self.limit / real_cost / self.level
+        up = ratio > 1
+        if self.damped and self._went_up is not None and up != self._went_up:
             self.most = float(np.sqrt(self.most))
-        self._was_beyond = beyond
-        ratio = self.most if real_cost <= 0 else self.limit / real_cost
+        self._went_up = up
         self.level = float(min(1.0, self.level * np.clip(ratio, 1 / self.most, self.most)))
         return self.level

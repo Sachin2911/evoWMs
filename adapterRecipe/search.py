@@ -43,10 +43,12 @@ With an archive (--archive, archive.py):
                     the most reward for every cost level and manner of acting. Every
                     adapter it holds is rolled again in each generation
     current best    the adapter with the most reward at or under the limit level
-    the limit level is the imagined cost level that matches the real limit. It moves as
-                    the price does, the other way. After every check, and when a
-                    generation adds nothing to the archive, the search starts again from
-                    an adapter the archive holds near that level
+    the limit level is the imagined cost level that matches the real limit. It moves
+                    towards the level the real episodes point to: the imagined cost level
+                    of the adapter that played, times the limit over its real cost. A
+                    change to the archive counts for more the nearer its cost level is to
+                    it. After every check, and when a generation adds nothing to the
+                    archive, the search starts again from an adapter near that level
 
 In both ways --damped shrinks the most the price or the level changes each time the real
 cost crosses the limit, and --cautious holds an adapter to its mean cost plus the
@@ -355,7 +357,7 @@ def main():
                 # Every adapter the archive holds is scored again on this generation's states.
                 archive.rebuild([{'weights': member['weights'], **measured(member['weights'], reference, generation)}
                                  for member in archive.members.values()])
-                scores, added = archive.take_in(scored)
+                scores, added = archive.take_in(scored, limit_level.level)
             search.tell(scores)
             top = int(np.argmax(scores))
             line = {'generation': generation, 'price': price, 'step': float(search.step),
@@ -396,7 +398,8 @@ def main():
             most = float(np.sqrt(most))
         was_beyond = beyond
         price *= float(np.clip(record['judged cost'] / args.limit, 1 / most, most))
-        limit_level.moved_by(record['judged cost'])
+        # With an archive the adapter that played is often not at the limit level, so its imagined cost level counts.
+        limit_level.moved_by(record['judged cost'], imagined['cost'] if archive is not None else None)
         latest = together([states for states, _ in seen])
         failures = together([failures] + [only(states, failed) for states, failed in seen])
         if args.lowest:
