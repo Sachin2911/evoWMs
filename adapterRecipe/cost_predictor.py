@@ -153,10 +153,11 @@ def misfit(scores, costly):
     return np.mean(np.logaddexp(0, scores) - costly * scores)
 
 
-def fit(numbers, costly, strength):
+def fit(numbers, costly, strength, start=None, steps=1000):
     """Finds the weights and offset with the smallest misfit plus `strength` times the sum of squared weights.
 
-    Returns the predictor and how the search for it ended.
+    The search for them begins at the predictor `start` if one is given, and takes at
+    most `steps` steps. Returns the predictor and how the search for it ended.
     """
     def penalised(parameters):
         weights, offset = parameters[:-1], parameters[-1]
@@ -167,10 +168,13 @@ def fit(numbers, costly, strength):
         slope = (error.astype(np.float32) @ numbers).astype(np.float64) + 2 * strength * weights
         return value, np.append(slope, error.sum())
 
-    share = costly.mean()
-    start = np.zeros(numbers.shape[1] + 1)
-    start[-1] = np.log(share / (1 - share))    # with all weights zero, this offset gives every row the overall share
-    found = optimize.minimize(penalised, start, jac=True, method='L-BFGS-B', options={'maxiter': 1000})
+    if start is None:
+        share = costly.mean()
+        begin = np.zeros(numbers.shape[1] + 1)
+        begin[-1] = np.log(share / (1 - share))    # with all weights zero, this offset gives every row the overall share
+    else:
+        begin = np.append(start['weights'], start['offset']).astype(np.float64)
+    found = optimize.minimize(penalised, begin, jac=True, method='L-BFGS-B', options={'maxiter': steps})
     predictor = {'weights': found.x[:-1].astype(np.float32), 'offset': np.float32(found.x[-1])}
     # A search that stops before it has settled still gives a usable predictor, but it is said.
     reason = found.message.decode() if isinstance(found.message, bytes) else str(found.message)

@@ -101,8 +101,13 @@ class Imagination:
         self._frozen, self._fixed, self._state = frozen, fixed, state
         self._decision = frozen.compiled(decision)
 
-    def roll(self, weights, decisions, seed=0):
+    def roll(self, weights, decisions, seed=0, state=None, fixed=None):
         """Imagines `decisions` decisions from every starting state, with the adapter at `weights`.
+
+        `state` and `fixed`, if given, take the place of the starting states and of the
+        cost predictor and sizes that this Imagination was made with. A search uses them
+        to start each generation somewhere new and to bring in a retrained predictor.
+        Starting states of the same number as before need no new compiling.
 
         Returns four arrays with one row per decision and one column per starting state:
 
@@ -114,10 +119,11 @@ class Imagination:
         # Each imagined decision takes its random numbers from the frozen agent's own
         # source for adapters, which this sets to the same place for every roll.
         self._frozen.reseed(seed)
-        state = self._state
+        state = self._state if state is None else state
+        fixed = self._fixed if fixed is None else fixed
         kept = {name: [] for name in ('cost', 'reward', 'value', 'moved')}
         for _ in range(decisions):
-            came = self._decision(state, self._fixed, weights)
+            came = self._decision(state, fixed, weights)
             state = came['state']
             for name, rows in kept.items():
                 rows.append(came[name])
