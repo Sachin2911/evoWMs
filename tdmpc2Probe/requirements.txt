@@ -1,0 +1,26 @@
+# The Python packages this test relies on, at the versions the TD-MPC2 image holds (Python 3.9).
+#
+# Nothing is installed from this file. The image is the one TD-MPC2's authors published, which
+# already holds these packages; check_env.py compares this list with what it finds there.
+# The versions are taken from the package list that image was built from and from the
+# install commands in its build history, and agree with the install records in its layers.
+
+# TD-MPC2's package list asks for PyTorch 2.2.2 or newer from the nightly builds and names
+# no exact version. This is the build the image's own records show it got: a nightly build
+# for CUDA 12.1, which brings its CUDA libraries with it and needs only the node's driver.
+torch==2.3.0.dev20240122
+
+numpy==1.23.5
+
+# Read TD-MPC2's settings file.
+hydra-core==1.3.2
+omegaconf==2.3.0
+
+# Meta-World, at the commit TD-MPC2 names, and what it runs on. This commit is from before
+# Meta-World moved to the new MuJoCo bindings and to gymnasium, so it needs gym 0.21.0 and
+# mujoco-py, which is compiled against MuJoCo 2.1.0. TD-MPC2's first release, the one the
+# agents were published with, names these same three versions.
+gym==0.21.0
+mujoco-py==2.1.2.14
+glfw==2.6.4
+metaworld @ git+https://github.com/Farama-Foundation/Metaworld.git@04be337a12305e393c0caf0cbf5ec7755c7c8feb

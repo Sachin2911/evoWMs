@@ -1,0 +1,46 @@
+# Puts together the TD-MPC2 image on the cluster, from the image TD-MPC2's authors published.
+#
+# Their image already holds what the released Meta-World agents were made with: Python 3.9,
+# PyTorch built for CUDA 12.1 with its CUDA libraries, Meta-World at the commit TD-MPC2
+# names, gym 0.21.0, and mujoco-py compiled against MuJoCo 2.1.0. Those last three are hard
+# to install today, and an install step cannot run in a build on the cluster (see
+# safeDreamerImage/safeDreamer.def). So this recipe installs nothing. It copies in two
+# folders that build_image.sh has fetched: TD-MPC2's code at the commit the image was built
+# for, and MuJoCo 2.1.0.
+#
+# Built by build_image.sh. To run a command inside the result, with the node's GPU:
+#   apptainer exec --nv ~/images/tdmpc2.sif python3 some_script.py
+
+# Pinned by its checksum, so the image cannot change under us. It is nicklashansen/tdmpc2:1.0.0.
+Bootstrap: docker
+From: nicklashansen/tdmpc2@sha256:0c3d56125d799c589183e349e27f27a957fbff0a9964877fae909b801fab47bb
+
+# Both folders are looked for in the folder the build is started from; build_image.sh
+# starts it in the right one.
+%files
+    mujoco210 /opt/mujoco210
+    tdmpc2 /opt/tdmpc2
+
+%environment
+    # The image's own Python 3.9, with the packages.
+    export PATH=/opt/conda/bin:$PATH
+    # Where mujoco-py finds MuJoCo. The image has MuJoCo in /root, which only the admin
+    # account inside the image can open, and Apptainer runs as us; hence the copy in /opt.
+    export MUJOCO_PY_MUJOCO_PATH=/opt/mujoco210
+    # mujoco-py refuses to start unless MuJoCo's library folder is on this list.
+    # /usr/lib/x86_64-linux-gnu comes next so that the image's own graphics libraries are
+    # used: `--nv` also brings in the node's copies, which are built for a newer Ubuntu.
+    export LD_LIBRARY_PATH=/opt/mujoco210/bin:/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+    # The image holds mujoco-py compiled for drawing on the CPU. On seeing a GPU it would
+    # look for a GPU version instead, find none, and try to compile one, which it cannot
+    # do here. This keeps it to the version it has. Nothing is drawn in this test anyway.
+    export MUJOCO_PY_FORCE_CPU=1
+    # Where collect.py and check_env.py find TD-MPC2's code.
+    export TDMPC2_DIR=/opt/tdmpc2
+    # Apptainer mounts the home folder; this stops Python picking up packages from ~/.local.
+    export PYTHONNOUSERSITE=1
+
+%labels
+    base.image nicklashansen/tdmpc2@sha256:0c3d56125d799c589183e349e27f27a957fbff0a9964877fae909b801fab47bb
+    tdmpc2.commit 02b18a48b1c4e4eae0425eada444fafcb43bca0a
+    mujoco.version 2.1.0
