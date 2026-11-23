@@ -390,9 +390,9 @@ def main():
             least = seen[int(np.argmin(rewards))][0]
             lowest = least if lowest is None else together([lowest, least])
         kept = [(failures, args.failures), (lowest, args.lowest)]
-        if not args.keep_predictor and 'first' not in fixed['predictor']:
+        if not args.keep_predictor:
             costly = amounts[:filled] > 0
-            start = {name: fixed['predictor'][name] for name in ('weights', 'offset')}
+            start = {name: value for name, value in fixed['predictor'].items() if name != 'mean_cost'}
             fitted, ended = fit(numbers[:filled], costly, trained['chosen strength'], start=start, steps=100)
             fitted['mean_cost'] = np.float32(amounts[:filled][costly].mean())
             fixed = {'predictor': fitted, 'sizes': fixed['sizes']}

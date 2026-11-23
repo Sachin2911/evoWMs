@@ -18,6 +18,11 @@ The predictor is a logistic regression, one weight per state number and an offse
 
     chance = 1 / (1 + exp(-(numbers . weights + offset)))
 
+With --hidden N the state numbers first pass through one hidden layer of N units, each
+the tanh of a weighted sum of them, and the logistic regression reads those N numbers. A
+weighted sum of the state can only see a cost that lies along one direction of it. This
+is the comparison implementation/adapterArchitecture.md asks for (decision 9).
+
 The expected cost is the chance times the mean cost of a costly decision in the training
 episodes.
 
@@ -103,6 +108,8 @@ def load(files, ahead):
 
 def score(predictor, numbers):
     """The number that chance() squashes into a chance. Higher means a cost is more likely."""
+    if 'first' in predictor:
+        numbers = np.tanh(numbers @ predictor['first'] + predictor['first_offset'])
     return (numbers @ predictor['weights']).astype(np.float64) + predictor['offset']
 
 
@@ -157,12 +164,54 @@ def misfit(scores, costly):
     return np.mean(np.logaddexp(0, scores) - costly * scores)
 
 
-def fit(numbers, costly, strength, start=None, steps=1000):
+def fit_hidden(numbers, costly, strength, units, start=None, steps=1000, seed=0):
+    """fit() for a predictor with one hidden layer of `units` units. It begins at `start`, or at small random weights."""
+    states = numbers.shape[1]
+    cuts = np.cumsum([states * units, units, units])
+
+    def unpacked(parameters):
+        first, first_offset, weights, offset = np.split(parameters, cuts)
+        return first.reshape(states, units).astype(np.float32), first_offset.astype(np.float32), weights, offset[0]
+
+    def penalised(parameters):
+        first, first_offset, weights, offset = unpacked(parameters)
+        hidden = np.tanh(numbers @ first + first_offset)
+        scores = (hidden @ weights.astype(np.float32)).astype(np.float64) + offset
+        value = misfit(scores, costly) + strength * (weights @ weights + float(np.sum(np.square(first, dtype=np.float64))))
+        # How the value changes with every weight, which the search follows downhill.
+        error = ((special.expit(scores) - costly) / len(costly)).astype(np.float32)
+        into_hidden = np.outer(error, weights.astype(np.float32)) * (1 - hidden ** 2)
+        slope = [(numbers.T @ into_hidden).astype(np.float64).ravel() + 2 * strength * first.ravel(),
+                 into_hidden.sum(0).astype(np.float64), (hidden.T @ error).astype(np.float64) + 2 * strength * weights,
+                 [float(error.sum())]]
+        return value, np.concatenate(slope)
+
+    if start is None:
+        random = np.random.default_rng(seed)
+        share = costly.mean()
+        begin = np.concatenate([random.normal(0, 1 / np.sqrt(states), states * units), np.zeros(units),
+                                random.normal(0, 1 / np.sqrt(units), units), [np.log(share / (1 - share))]])
+    else:
+        begin = np.concatenate([start['first'].ravel(), start['first_offset'], start['weights'],
+                                [start['offset']]]).astype(np.float64)
+    found = optimize.minimize(penalised, begin, jac=True, method='L-BFGS-B', options={'maxiter': steps})
+    first, first_offset, weights, offset = unpacked(found.x)
+    predictor = {'first': first, 'first_offset': first_offset, 'weights': weights.astype(np.float32), 'offset': np.float32(offset)}
+    reason = found.message.decode() if isinstance(found.message, bytes) else str(found.message)
+    return predictor, {'steps': int(found.nit), 'settled': bool(found.success), 'ended': reason}
+
+
+def fit(numbers, costly, strength, start=None, steps=1000, hidden=0):
     """Finds the weights and offset with the smallest misfit plus `strength` times the sum of squared weights.
 
     The search for them begins at the predictor `start` if one is given, and takes at
-    most `steps` steps. Returns the predictor and how the search for it ended.
+    most `steps` steps. Returns the predictor and how the search for it ended. With
+    `hidden`, or a `start` that has a hidden layer, the predictor has one.
     """
+    if start is not None and 'first' in start:
+        hidden = start['first'].shape[1]
+    if hidden:
+        return fit_hidden(numbers, costly, strength, hidden, start, steps)
     def penalised(parameters):
         weights, offset = parameters[:-1], parameters[-1]
         scores = score({'weights': weights.astype(np.float32), 'offset': offset}, numbers)
@@ -214,6 +263,7 @@ def main():
     parser.add_argument('--test', type=int, default=40, help='episodes kept for the final scoring')
     parser.add_argument('--validation', type=int, default=20, help='episodes that choose the strength')
     parser.add_argument('--train', type=int, help='training episodes to use (default: all the rest)')
+    parser.add_argument('--hidden', type=int, default=0, help='units of one hidden layer between the state and the chance (0: none)')
     parser.add_argument('--out', help='folder for the predictor (default: the run folder)')
     args = parser.parse_args()
 
@@ -235,7 +285,7 @@ def main():
 
     tried = []
     for strength in STRENGTHS:
-        predictor, search = fit(training['numbers'], training['costly'], strength)
+        predictor, search = fit(training['numbers'], training['costly'], strength, hidden=args.hidden)
         fits = misfit(score(predictor, validation['numbers']), validation['costly'])
         tried.append({'strength': strength, 'validation misfit': float(fits), **search, 'predictor': predictor})
         print(f'strength {strength:g}: validation misfit {fits:.4f}, {search["steps"]} steps'
@@ -250,7 +300,7 @@ def main():
     costly, onsets = test['costly'], ~test['charged']
     alarms = chances >= 0.5
     shuffled = np.random.default_rng(0).permutation(training['costly'])
-    control, _ = fit(training['numbers'], shuffled, best['strength'])
+    control, _ = fit(training['numbers'], shuffled, best['strength'], hidden=args.hidden)
     result = {
         'costly share of test rows': float(costly.mean()),
         'misfit': float(misfit(score(predictor, test['numbers']), costly)),
@@ -284,6 +334,7 @@ def main():
         'checkpoint': collected['checkpoint'],
         'task': collected['task'],
         'ahead': args.ahead,
+        'hidden units': args.hidden,
         'files': {name: [chosen[0].name, chosen[-1].name, len(chosen)] for name, chosen in split.items()},
         'costly share of training rows': float(training['costly'].mean()),
         'mean cost of a costly row': mean_cost,
