@@ -9,12 +9,12 @@ agent and its simulator can show. Six things must hold, or the check fails:
                    the unadapted agent's episode: every action, reward and cost is the same
     bounded        with random weights every output and every memory lies between -1 and 1,
                    and every action number the adapter changed lies within the limits
+                   (to the last digit a GPU gives)
     same again     the same states, weights and memory give exactly the same actions a
                    second time
     remembered     in an episode played with random weights, the memory saved at each
-                   decision is the one that the decision before handed on, and the action
-                   saved is the one the adapter gives for the saved state and memory. The
-                   decisions are worked out again one at a time, as they were played
+                   decision is the one that the decision before handed on, exactly: it is
+                   carried from one decision to the next and never worked out twice
     told           in that episode the world model was told the action that was taken (for
                    DreamerV3: one roll forward from a saved state with the saved action
                    gives the continuous part of the next saved state)
@@ -23,12 +23,13 @@ Measured, with nothing fitted:
 
     sizes          what the look-ahead numbers are divided by, by stretch
     time           milliseconds for one decision
-    all at once    how far the adapter's outputs for the decisions of an episode worked
-                   out together, as an imagined roll works them out, lie from the same
-                   decisions worked out one at a time, as the simulator is played. The
-                   agent computes in half the digits, and the last of them depend on how
-                   many states are worked out together. This is measured with the random
-                   weights and with steering
+    worked out again   how far the adapter's outputs for the decisions of a played episode
+                   lie from the same decisions worked out again: one at a time, and all
+                   together as an imagined roll works them out. The agent computes in
+                   half the digits, the last of them depend on how a computation is laid
+                   out, and a look-ahead that takes the most likely class at every step
+                   jumps when two classes are nearly as likely. This is measured with
+                   random weights and with steering
     played         whole episodes with steering written in this form, against the
                    unadapted agent on the same seeds
 
@@ -60,6 +61,7 @@ def main():
     parser.add_argument('--predictor', required=True)
     parser.add_argument('--episodes', type=int, default=3, help='episodes played for each of: unadapted, zero weights, steering')
     parser.add_argument('--first-seed', type=int, default=3000)
+    parser.add_argument('--look', default='likely', choices=('likely', 'mean'), help='what the look-ahead rolls on')
     args = parser.parse_args()
 
     out = pathlib.Path(os.environ.get('MS_RUN_DIR', '.'))
@@ -67,9 +69,9 @@ def main():
     for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
     player = player_of(args.checkpoint)
     frozen = player.frozen
-    adapter = MemoryAdapter(player.action_numbers)
-    fixed = {'predictor': for_gpu,
-             'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'), adapter.lengths, adapter.stop)}
+    adapter = MemoryAdapter(player.action_numbers, roll=args.look)
+    fixed = {'predictor': for_gpu, 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'),
+                                                                adapter.lengths, adapter.stop, adapter.roll)}
     act = adapter.compiled(frozen, everything=True)
     zero = np.zeros(adapter.count, np.float32)
     random = np.random.default_rng(0)
@@ -96,8 +98,10 @@ def main():
     once = act(states[0], saved[0]['proposed'], memory, fixed, weights)
     again = act(states[0], saved[0]['proposed'], memory, fixed, weights)
     changed = once['action'] != saved[0]['proposed']
-    bounded = (np.isfinite(once['action']).all() and (np.abs(once['output']) <= 1).all() and (np.abs(once['memory']) <= 1).all()
-               and (np.abs(once['action'][changed]) <= 1).all())
+    # A tanh worked out on a GPU can come out one last digit above 1, so the bound has that much room.
+    most = 1 + 1e-5
+    bounded = (np.isfinite(once['action']).all() and (np.abs(once['output']) <= most).all()
+               and (np.abs(once['memory']) <= most).all() and (np.abs(once['action'][changed]) <= most).all())
     held_to('bounded', bool(bounded), f'{changed.any(1).mean():.0%} of decisions changed with random weights; '
             f'the largest output is {np.abs(once["output"]).max():.3f} and the largest memory {np.abs(once["memory"]).max():.3f}')
     held_to('same again', all(np.array_equal(once[name], again[name]) for name in once), 'the same actions, outputs and memories twice')
@@ -123,37 +127,56 @@ def main():
 
     # remembered and told, in one episode played with small random weights.
     small = (0.3 * weights).astype(np.float32)
-    episode, = player.play([args.first_seed], adapter=with_weights(small), memory=adapter.start())
+    with_small, calls = with_weights(small), []
+
+    def recording(state, proposed, held):
+        """The adapter, with what it was handed and what it gave kept for every decision."""
+        action, following = with_small(state, proposed, held)
+        calls.append((held, action, following))
+        return action, following
+
+    episode, = player.play([args.first_seed], adapter=recording, memory=adapter.start())
     entries = len(episode['proposed']) - 1     # the last entry's action is never taken
+    carried = all(np.array_equal(calls[entry + 1][0], calls[entry][2]) for entry in range(len(calls) - 1))
+    saved_as_read = np.array_equal(episode['memory'], np.concatenate([held for held, _, _ in calls]))
+    # The episode keeps an action in the agent's half digits, so the last digits of the two can differ.
+    action_gap = float(np.abs(np.concatenate([action for _, action, _ in calls])[:entries] - episode['action'][:entries]).max())
+    held_to('remembered', carried and saved_as_read and action_gap < 1e-3 and not episode['memory'][0].any(),
+            f'over {len(calls)} decisions each memory read is the one the decision before handed on, the episode saved them as '
+            f'read, and the actions saved are the adapter\'s to within {action_gap:.5f}; the memory reaches '
+            f'{np.abs(episode["memory"]).max():.3f}')
+
+    # worked out again: the played decisions one at a time and as one batch.
     state = frozen.written_out(frozen.kept(episode, slice(0, entries)))
 
     def one_at_a_time(weights, memories):
-        """What the adapter gives for each saved decision on its own, the way the episode was played."""
+        """What the adapter gives for each saved decision on its own, the way an episode is played."""
         each = [act({name: part[entry:entry + 1] for name, part in state.items()}, episode['proposed'][entry:entry + 1],
                     memories[entry:entry + 1], fixed, weights) for entry in range(entries)]
         return {name: np.concatenate([made[name] for made in each]) for name in each[0]}
 
-    alone = one_at_a_time(small, episode['memory'])
-    # The episode keeps an action in the agent's half digits, so the last digits of the two can differ.
-    memory_gap = float(np.abs(alone['memory'][:-1] - episode['memory'][1:entries]).max())
-    action_gap = float(np.abs(alone['action'] - episode['action'][:entries]).max())
-    held_to('remembered', memory_gap < 1e-3 and action_gap < 1e-3 and not episode['memory'][0].any(),
-            f'over {entries} decisions the memory saved is the one handed on to within {memory_gap:.5f} and the action saved '
-            f'is the adapter\'s to within {action_gap:.5f}; the memory reaches {np.abs(episode["memory"]).max():.3f}')
+    def spread(gap):
+        return {'median': float(np.median(gap)), '9 in 10 within': float(np.quantile(gap, 0.9)),
+                '99 in 100 within': float(np.quantile(gap, 0.99)), 'largest': float(gap.max()),
+                'share above 0.05': float((gap > 0.05).mean())}
 
-    # all at once: the same decisions as one batch, against one at a time.
-    result['all at once'] = {}
+    def said(gap):
+        return (f'{np.median(gap):.4f} at the median decision, less than {np.quantile(gap, 0.9):.4f} at 9 in 10 and '
+                f'{np.quantile(gap, 0.99):.4f} at 99 in 100, {gap.max():.4f} at the most; {(gap > 0.05).mean():.1%} above 0.05')
+
+    result['worked out again'] = {}
     for name, tried, memories in (('random weights', small, episode['memory']),
                                   ('steering', adapter.steering(), np.zeros_like(episode['memory']))):
         alone = one_at_a_time(tried, memories)
         together = act(state, episode['proposed'][:entries], memories[:entries], fixed, tried)
         gap = np.abs(together['output'] - alone['output']).max(1)
-        result['all at once'][name] = {'median': float(np.median(gap)), '9 in 10 within': float(np.quantile(gap, 0.9)),
-                                       '99 in 100 within': float(np.quantile(gap, 0.99)), 'largest': float(gap.max()),
-                                       'share above 0.05': float((gap > 0.05).mean())}
-        print(f'       all at once, {name}: the outputs differ by {np.median(gap):.4f} at the median decision, by less than '
-              f'{np.quantile(gap, 0.9):.4f} at 9 in 10 and {np.quantile(gap, 0.99):.4f} at 99 in 100, and by {gap.max():.4f} '
-              f'at the most; {(gap > 0.05).mean():.1%} of decisions differ by more than 0.05', flush=True)
+        result['worked out again'][name] = {'together against one at a time, outputs': spread(gap)}
+        print(f'       worked out again, {name}: all together against one at a time, the outputs differ by {said(gap)}', flush=True)
+        if name == 'random weights':
+            gap = np.abs(alone['action'] - episode['action'][:entries]).max(1)
+            result['worked out again'][name]['one at a time against the episode, actions'] = spread(gap)
+            print(f'       worked out again, {name}: one at a time against the episode as played, the actions differ by {said(gap)}',
+                  flush=True)
     if hasattr(frozen, 'roll_forward'):
         def roll(state, action):
             return frozen.roll_forward(state, action, sample=False)['deter']

@@ -81,6 +81,8 @@ def main():
     parser.add_argument('--adapter', help='a file written by adapter.save, for kind `saved`')
     parser.add_argument('--scale', type=float, default=1.0, help='steering: what its weights are multiplied by')
     parser.add_argument('--form', default='residual', choices=('residual', 'memory'), help='steering: the form it is written in')
+    parser.add_argument('--look', default='likely', choices=('likely', 'mean'),
+                        help='steering of form memory: what its look-ahead rolls on')
     parser.add_argument('--reward-weight', type=float, default=0.0, help='re-rank: the weight of a reward change')
     parser.add_argument('--cost-weight', type=float, default=1.0, help='re-rank: the weight of a cost change')
     parser.add_argument('--decisions', type=int, default=10, help='how many decisions the look-ahead lasts')
@@ -108,9 +110,9 @@ def main():
     elif args.kind == 'steering' and args.form == 'memory':
         predictor, trained, _ = read(args.predictor, args.checkpoint)
         for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
-        adapter = adapters.MemoryAdapter(action_numbers)
-        fixed = {'predictor': for_gpu,
-                 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'), adapter.lengths, adapter.stop)}
+        adapter = adapters.MemoryAdapter(action_numbers, roll=args.look)
+        fixed = {'predictor': for_gpu, 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'),
+                                                                    adapter.lengths, adapter.stop, adapter.roll)}
         weights = adapter.steering(args.scale)
         described.update({
             'scale': args.scale, 'predictor': args.predictor, **adapter.describe(),

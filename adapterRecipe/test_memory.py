@@ -40,7 +40,7 @@ class MadeUpAgent:
     def step(self, state, action, sample=True):
         # Like both real agents, the model clips the action it is given.
         following = np.tanh(state['z'] @ self._from_state + np.clip(action, -1, 1) @ self._from_action)
-        if sample:
+        if sample is True:      # False and 'mean' are both the model without its noise
             following = following + 0.01 * self._random.normal(size=following.shape).astype(np.float32)
         return {'z': following}, following.sum(-1)
 
@@ -211,6 +211,18 @@ class Adapter(unittest.TestCase):
         self.assertEqual(table[2, called.index('cost change, number 0 up, decisions 1 to 5')], -0.5)
         self.assertEqual(table[3, called.index('cost change, number 1 down, decisions 11 to 15')], 0.5)
         self.assertEqual(np.count_nonzero(table), 12)
+
+    def test_the_roll_is_kept_with_the_adapter(self):
+        frozen, state, predictor = made_up(states=3)
+        adapter = adapters.MemoryAdapter(2, roll='mean')
+        self.assertEqual(adapter.describe()['look-ahead roll'], 'mean')
+        fixed = Adapter().fixed(frozen, state, predictor, adapter)
+        with tempfile.TemporaryDirectory() as folder:
+            adapters.save(pathlib.Path(folder) / 'adapter.npz', adapter, np.zeros(adapter.count, np.float32), fixed)
+            loaded, _, _ = adapters.load(pathlib.Path(folder) / 'adapter.npz', 2)
+        self.assertEqual(loaded.roll, 'mean')
+        with self.assertRaises(ValueError):
+            adapters.MemoryAdapter(2, roll='drawn')
 
     def test_saved_and_loaded(self):
         frozen, state, predictor = made_up()

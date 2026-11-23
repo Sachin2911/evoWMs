@@ -53,14 +53,21 @@ class FrozenDreamer:
 
         Part of the model's next state is a random draw, so two calls can differ. With
         sample=False each categorical choice is instead the one the model finds most
-        likely, and the same state and action always give the same next state.
+        likely, and the same state and action always give the same next state. With
+        sample='mean' each choice is written as how likely the model finds every class,
+        which is the mean of the draws. That is not a state the model was trained on, but
+        it changes smoothly with what goes in, where the most likely class jumps when two
+        classes are nearly as likely as each other.
         """
         import jax
         import jax.numpy as jnp
         following = self._model.img_step(state, action)
-        if sample:
+        if sample is True:
             return following
-        # `logit` holds how likely the model finds each class of each choice.
+        # `logit` holds the logarithm of how likely the model finds each class of each choice.
+        if sample == 'mean':
+            chances = jnp.exp(following['logit'].astype(jnp.float32))
+            return {**following, 'stoch': chances.astype(following['stoch'].dtype)}
         likely = jnp.argmax(following['logit'], -1)
         classes = following['logit'].shape[-1]
         return {**following, 'stoch': jax.nn.one_hot(likely, classes, dtype=following['stoch'].dtype)}

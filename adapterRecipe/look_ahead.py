@@ -207,8 +207,12 @@ def expected(xp, predictor, numbers):
     return predictor['mean_cost'] / (1 + xp.exp(-score))
 
 
-def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS):
+def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS, roll='likely'):
     """Imagines holding each of `actions` to the last of `lengths`, and reads the sums at every one of them.
+
+    With roll 'likely' every imagined state takes the classes the model finds most
+    likely, and with 'mean' it is written as how likely the model finds each class
+    (FrozenDreamer.roll_forward).
 
     Returns `cost` and `reward`, each with one layer per length, one row per future and
     one column per state. A cost is the expected cost added up to that length. A reward
@@ -223,7 +227,7 @@ def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS):
     cost = reward = 0.0
     costs, rewards = [], []
     for decision in range(1, max(lengths) + 1):
-        state, earned = frozen.step(state, actions, sample=False)
+        state, earned = frozen.step(state, actions, sample=False if roll == 'likely' else roll)
         cost = cost + expected(xp, predictor, frozen.numbers(state))
         reward = reward + earned
         if decision in lengths:
@@ -282,17 +286,17 @@ def squashed(xp, numbers, sizes):
     return xp.sign(scaled) * xp.log1p(xp.abs(scaled))
 
 
-def read_by_stretch(frozen, predictor, state, proposed, lengths=LENGTHS, stop=True):
+def read_by_stretch(frozen, predictor, state, proposed, lengths=LENGTHS, stop=True, roll='likely'):
     """The unsquashed look-ahead numbers of every state of a batch, by stretch."""
-    return numbers_by_stretch(frozen, hold_by_stretch(frozen, predictor, state, held(frozen, proposed, stop), lengths))
+    return numbers_by_stretch(frozen, hold_by_stretch(frozen, predictor, state, held(frozen, proposed, stop), lengths, roll))
 
 
-def measured_by_stretch(frozen, predictor, files, lengths=LENGTHS, stop=True):
+def measured_by_stretch(frozen, predictor, files, lengths=LENGTHS, stop=True, roll='likely'):
     """The sizes of the look-ahead numbers over every decision of the saved episodes in `files`."""
     import numpy as np
 
     def look(state, proposed, predictor):
-        return read_by_stretch(frozen, predictor, state, proposed, lengths, stop)
+        return read_by_stretch(frozen, predictor, state, proposed, lengths, stop, roll)
 
     look = frozen.compiled(look)
     numbers = []

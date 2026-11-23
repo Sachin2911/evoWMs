@@ -93,7 +93,8 @@ def save(path, adapter, weights, fixed):
     """Saves an adapter with its weights and with what it needs besides them, as one .npz file."""
     settings = {'form': adapter.form, 'weights': np.asarray(weights, np.float32), 'sizes': fixed['sizes']}
     if adapter.form == 'memory':
-        settings.update(lengths=np.array(adapter.lengths), memory=adapter.memory, added_on=adapter.added_on, stop=adapter.stop)
+        settings.update(lengths=np.array(adapter.lengths), memory=adapter.memory, added_on=adapter.added_on, stop=adapter.stop,
+                        roll=adapter.roll)
     else:
         settings.update(size=adapter.size or '', decisions=adapter.decisions, push=adapter.push,
                         hidden=adapter.hidden, mixtures=adapter.mixtures)
@@ -106,7 +107,8 @@ def load(path, action_numbers, state_numbers=None):
     saved = np.load(path)
     if str(saved['form']) == 'memory':
         adapter = MemoryAdapter(action_numbers, tuple(int(length) for length in saved['lengths']),
-                                bool(saved['memory']), bool(saved['added_on']), bool(saved['stop']))
+                                bool(saved['memory']), bool(saved['added_on']), bool(saved['stop']),
+                                str(saved['roll']) if 'roll' in saved.files else 'likely')
     else:
         adapter = Adapter(str(saved['form']), str(saved['size']) or None, action_numbers, state_numbers,
                           int(saved['decisions']), float(saved['push']), int(saved['hidden']), int(saved['mixtures']))
@@ -277,6 +279,9 @@ class MemoryAdapter:
     added_on         True gives every output a weight that is added on whatever the inputs
                      are, to see what leaving those out costs
     stop             False leaves the stopped action out of the look-ahead
+    roll             how the look-ahead imagines: 'likely' takes the most likely class of
+                     every categorical choice at every step, and 'mean' writes each
+                     choice as how likely every class is. The second has no jumps
 
     The weights come as one row of `count` numbers: a table with one line per output, the
     gains first and then the shifts, and after it the fade weights. A line has one weight
@@ -294,10 +299,12 @@ class MemoryAdapter:
     form = 'memory'
     size = None
 
-    def __init__(self, action_numbers, lengths=LENGTHS, memory=True, added_on=False, stop=True):
+    def __init__(self, action_numbers, lengths=LENGTHS, memory=True, added_on=False, stop=True, roll='likely'):
+        if roll not in ('likely', 'mean'):
+            raise ValueError(f'the look-ahead rolls on the likely classes or on the mean, not on {roll}')
         self.action_numbers = action_numbers
         self.lengths = tuple(int(length) for length in lengths)
-        self.memory, self.added_on, self.stop = bool(memory), bool(added_on), bool(stop)
+        self.memory, self.added_on, self.stop, self.roll = bool(memory), bool(added_on), bool(stop), roll
         self.outputs = 2 * action_numbers
         self.inputs = len(self.lengths) * (4 * action_numbers + (3 if self.stop else 1))
         self.remembered = self.outputs if self.memory else 0
@@ -308,7 +315,7 @@ class MemoryAdapter:
     def describe(self):
         """The settings and the number of weights, for the record of a run."""
         return {'form': self.form, 'weights': self.count, 'lengths': list(self.lengths), 'memory': self.memory,
-                'added-on weights': self.added_on, 'stopped action': self.stop}
+                'added-on weights': self.added_on, 'stopped action': self.stop, 'look-ahead roll': self.roll}
 
     def names(self):
         """What each column of the table reads, in order."""
@@ -359,7 +366,7 @@ class MemoryAdapter:
         state = {name: state[name] for name in frozen.names}
         proposed = frozen.as_float(proposed)
         clipped = xp.clip(proposed, -1, 1)
-        imagined = hold_by_stretch(frozen, fixed['predictor'], state, held(frozen, proposed, self.stop), self.lengths)
+        imagined = hold_by_stretch(frozen, fixed['predictor'], state, held(frozen, proposed, self.stop), self.lengths, self.roll)
         inputs = squashed(xp, numbers_by_stretch(frozen, imagined), fixed['sizes'])
 
         table = weights[:self._in_table].reshape(self.outputs, self._columns)

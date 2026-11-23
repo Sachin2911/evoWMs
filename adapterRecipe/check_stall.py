@@ -59,6 +59,7 @@ def main():
     parser.add_argument('--predictor', required=True, help='the cost predictor steering works with, and whose episodes are the unadapted agent\'s')
     parser.add_argument('--adapter', help='an adapter with memory saved by a search (default: steering)')
     parser.add_argument('--scale', type=float, default=1.0, help='steering: what its weights are multiplied by')
+    parser.add_argument('--look', default='likely', choices=('likely', 'mean'), help='steering: what its look-ahead rolls on')
     parser.add_argument('--episodes', type=int, default=20, help='real episodes the adapter plays')
     parser.add_argument('--first-seed', type=int, default=4000)
     parser.add_argument('--starts', type=int, default=512, help='starting states drawn from those episodes')
@@ -77,9 +78,9 @@ def main():
         described = {'adapter file': args.adapter, **adapter.describe()}
     else:
         for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
-        adapter = adapters.MemoryAdapter(player.action_numbers)
-        fixed = {'predictor': for_gpu,
-                 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'), adapter.lengths, adapter.stop)}
+        adapter = adapters.MemoryAdapter(player.action_numbers, roll=args.look)
+        fixed = {'predictor': for_gpu, 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'),
+                                                                    adapter.lengths, adapter.stop, adapter.roll)}
         weights = adapter.steering(args.scale)
         described = {'steering': args.scale, **adapter.describe()}
     weights = np.asarray(weights, np.float32)

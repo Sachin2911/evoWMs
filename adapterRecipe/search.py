@@ -190,6 +190,8 @@ def main():
     parser.add_argument('--no-memory', action='store_true', help='form memory: leave the memory out')
     parser.add_argument('--added-on', action='store_true', help='form memory: give every output an added-on weight')
     parser.add_argument('--no-stop', action='store_true', help='form memory: leave the stopped action out of the look-ahead')
+    parser.add_argument('--look', default='likely', choices=('likely', 'mean'),
+                        help='form memory: the look-ahead rolls on the most likely classes or on the mean of the choices')
     parser.add_argument('--size', default='tens', choices=adapters.SIZES, help='of a residual or a mix')
     parser.add_argument('--decisions', type=int, default=10, help='how many decisions the look-ahead of the first forms lasts')
     parser.add_argument('--push', type=float, default=1.0)
@@ -235,8 +237,10 @@ def main():
     frozen = player.frozen
     action_numbers = player.action_numbers
     if args.form == 'memory':
-        adapter = adapters.MemoryAdapter(action_numbers, memory=not args.no_memory, added_on=args.added_on, stop=not args.no_stop)
-        fixed = {'predictor': for_gpu, 'sizes': measured_by_stretch(frozen, for_gpu, training, adapter.lengths, adapter.stop)}
+        adapter = adapters.MemoryAdapter(action_numbers, memory=not args.no_memory, added_on=args.added_on, stop=not args.no_stop,
+                                         roll=args.look)
+        fixed = {'predictor': for_gpu,
+                 'sizes': measured_by_stretch(frozen, for_gpu, training, adapter.lengths, adapter.stop, adapter.roll)}
         before, empty = max(adapter.lengths), adapter.start()
         act = adapter.compiled(frozen)
     else:
