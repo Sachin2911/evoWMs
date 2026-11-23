@@ -18,7 +18,9 @@ Every few generations comes a check, with the simulator. The search's current be
 plays real episodes, and three things follow from them:
 
     the price       goes up if those episodes cost more than the limit and down if less,
-                    by the ratio of the two, but by no more than a factor of 1.5
+                    by the ratio of the two, but by no more than a factor of 1.5. With
+                    --damped that factor shrinks to its square root each time the cost
+                    crosses the limit, so the price settles and does not swing
     the predictor   is fitted again, to the unadapted episodes it began with and every
                     episode played so far
     the states      of those episodes become the starting states of the next generations.
@@ -144,6 +146,8 @@ def main():
     parser.add_argument('--finalists', type=int, default=3)
     parser.add_argument('--more', type=int, default=20, help='further real episodes of each finalist')
     parser.add_argument('--keep-predictor', action='store_true', help='do not fit the cost predictor again after a check')
+    parser.add_argument('--damped', action='store_true',
+                        help='the most the price changes at a check shrinks each time the real cost crosses the limit')
     parser.add_argument('--first-seed', type=int, help='of the real episodes (default: 100000 + 1000 x seed)')
     args = parser.parse_args()
 
@@ -188,6 +192,7 @@ def main():
     imagination = Imagination(frozen, adapter, fixed, starts)
     seeds = iter(range(100000 + 1000 * args.seed if args.first_seed is None else args.first_seed, 10 ** 9))
     price, generation, checked, cost_paid = 1.0, 0, [], 0.0
+    most, was_beyond = MOST_THE_PRICE_CHANGES, None
     print(f'{player.task}, search seed {args.seed}, {args.search}: {adapter.describe()}, {args.candidates} candidates a '
           f'generation, {args.starts} starting states, rolls of {args.roll} decisions', flush=True)
 
@@ -244,7 +249,11 @@ def main():
                   'rewards': rewards, 'costs': costs}
         checked.append(record)
 
-        price *= float(np.clip(record['cost'] / COST_LIMIT, 1 / MOST_THE_PRICE_CHANGES, MOST_THE_PRICE_CHANGES))
+        beyond = record['cost'] > COST_LIMIT
+        if args.damped and was_beyond is not None and beyond != was_beyond:
+            most = float(np.sqrt(most))
+        was_beyond = beyond
+        price *= float(np.clip(record['cost'] / COST_LIMIT, 1 / most, most))
         latest = together([state for state, _ in seen])
         failures = together([failures] + [{name: state[name][failed] for name in state} for state, failed in seen])
         if not args.keep_predictor:
