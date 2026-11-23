@@ -36,7 +36,8 @@ def search_of(adapter_file, fetched):
     run, _, rest = adapter_file[len(RUNS_ON_CLUSTER):].partition('/')
     for folder in fetched:
         if folder.name == run:
-            final = (folder / rest).with_name('final.json')
+            # final.json lies in the search's own folder, which also holds adapters/ with the adapter of every check.
+            final = folder / pathlib.Path(rest).parts[0] / 'final.json'
             return json.loads(final.read_text()) if final.exists() else None
     return None
 
@@ -63,6 +64,9 @@ def from_scoreboard(file, fetched):
                        if key in ('form', 'size', 'generations', 'keep_predictor', 'candidates', 'starts', 'roll', 'failures')
                        and value != DEFAULTS[key]]
             name = f'search, {settings["search"]}' + ''.join(f', {one}' for one in changed) + f', seed {settings["seed"]}'
+            saved_as = pathlib.Path(played['adapter file']).stem
+            if saved_as != 'final':
+                name += f', {saved_as.replace("_", " ")} (not the one chosen)'
             steps = search['simulator steps']
     rewards = [row['reward'] for row in saved['each episode']]
     costs = [row['cost'] for row in saved['each episode']]
