@@ -63,8 +63,18 @@ WAYS = {'drawn': True, 'most likely': False}    # how a roll gets its actions an
 
 
 def same_order(first, second):
-    """The rank correlation of two sets of scores: 1 if they put the candidates in the same order."""
+    """The rank correlation of two sets of scores: 1 if they put the candidates in the same order.
+
+    None if one set gives every candidate the same score, which leaves no order to compare.
+    """
+    if np.ptp(first) == 0 or np.ptp(second) == 0:
+        return None
     return float(stats.spearmanr(first, second).correlation)
+
+
+def shown(agreements):
+    """Some rank correlations in a row, for printing."""
+    return ' / '.join('  n/a' if one is None else f'{one:+.2f}' for one in agreements)
 
 
 def together(first, second):
@@ -239,17 +249,16 @@ def main():
     print(f'\nagreement of the order by imagined score with the order by real score, over {len(order)} candidates '
           f'and {args.episodes} episodes each (all / the dial / around zero / around steering):')
     for name, found in agreement.items():
-        print(f'  {name:15s} ' + '; '.join(
-            f'{score} ' + ' / '.join(f'{found[kind][score]:+.2f}' for kind in groups)
-            for score in ('cost', 'reward', 'reward with value')))
-    print(f'  {"real, two halves":15s} ' + '; '.join(
-        f'{score} ' + ' / '.join(f'{ceiling[kind][score]:+.2f}' for kind in groups) for score in ('cost', 'reward')))
+        print(f'  {name:16s} ' + '; '.join(
+            f'{score} ' + shown(found[kind][score] for kind in groups) for score in ('cost', 'reward', 'reward with value')))
+    print(f'  {"real, two halves":16s} ' + '; '.join(
+        f'{score} ' + shown(ceiling[kind][score] for kind in groups) for score in ('cost', 'reward')))
 
-    shown = f'drawn, {longest}'
-    print(f'\ncandidates, real against imagined ({shown}): reward, cost')
+    listed = f'drawn, {longest}'
+    print(f'\ncandidates, real against imagined ({listed}): reward, cost')
     for position, name in enumerate(order):
         print(f'  {name:19s} real {real_reward[position]:6.2f}, {real_cost[position]:6.1f}; imagined '
-              f'{imagined[shown]["reward"][position]:6.2f}, {imagined[shown]["cost"][position]:6.1f}; '
+              f'{imagined[listed]["reward"][position]:6.2f}, {imagined[listed]["cost"][position]:6.1f}; '
               f'action changed at {rolls["drawn"][name]["moved"].mean():.0%} of imagined decisions')
     for name, verdict in verdicts.items():
         print(f'{name}: {verdict}')
