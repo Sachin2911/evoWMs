@@ -285,8 +285,9 @@ def main():
         played = list(player.play(seeds, adapter=with_weights(kind, weights)))
         reward, cost = totals(played)
         gaps[name] = [told(episode) for episode in played]
-        differs = np.concatenate([(np.clip(episode['action'], -1, 1) != np.clip(episode['proposed'], -1, 1)).any(1)[:-1]
-                                  for episode in played])
+        # How far each action number was moved at each decision, as the simulator takes the actions.
+        moves = np.concatenate([np.abs(np.clip(episode['action'], -1, 1) - np.clip(episode['proposed'], -1, 1))[:-1]
+                                for episode in played])
         report[name] = {
             'kind': kinds[kind].describe(),
             'reward': mean_and_range(reward),
@@ -297,7 +298,9 @@ def main():
             'cost over the unadapted agent\'s': float(cost.mean() / cost_alone.mean()),
             'episodes with less cost, the same, more': [int((cost < cost_alone).sum()), int((cost == cost_alone).sum()),
                                                         int((cost > cost_alone).sum())],
-            'decisions at which the action was changed': float(differs.mean()),
+            'decisions at which the action was changed at all': float((moves > 0).any(1).mean()),
+            'decisions at which a number was moved by more than 0.1': float((moves > 0.1).any(1).mean()),
+            'mean move of each action number': [float(move) for move in moves.mean(0)],
             'seconds an episode': round((time.perf_counter() - started) / len(seeds), 1),
             'episodes': [{'seed': seed, 'reward': float(one), 'cost': float(other)}
                          for seed, one, other in zip(seeds, reward, cost)],
@@ -307,8 +310,9 @@ def main():
               f'{found["reward change"][0]:+.2f} ({found["reward change"][1]:+.2f} to {found["reward change"][2]:+.2f}), cost '
               f'{found["cost change"][0]:+.1f} ({found["cost change"][1]:+.1f} to {found["cost change"][2]:+.1f}); '
               f'less cost in {found["episodes with less cost, the same, more"][0]} episodes, more in '
-              f'{found["episodes with less cost, the same, more"][2]}; action changed at '
-              f'{found["decisions at which the action was changed"]:.0%} of decisions', flush=True)
+              f'{found["episodes with less cost, the same, more"][2]}; a number moved by more than 0.1 at '
+              f'{found["decisions at which a number was moved by more than 0.1"]:.0%} of decisions, changed at all at '
+              f'{found["decisions at which the action was changed at all"]:.0%}', flush=True)
     report['unadapted']['episodes'] = [{'seed': seed, 'reward': float(one), 'cost': float(other)}
                                        for seed, one, other in zip(seeds, reward_alone, cost_alone)]
 
