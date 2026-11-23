@@ -341,6 +341,11 @@ class Search(unittest.TestCase):
         final, checks, adapter, files = self.run_search('--archive', '--diagonal')
         self.assertIn('archive.jsonl', files)
 
+    def test_from_steering(self):
+        self.run_search('--begin', 'steering', '--cautious', '--damped')
+        final, checks, adapter, files = self.run_search('--begin', 'steering', '--archive')
+        self.assertIn('archive.jsonl', files)
+
     def test_random_search_and_no_kept_lowest(self):
         self.run_search('--search', 'random', '--lowest', '0', '--added-on', '--no-stop')
 
@@ -377,6 +382,8 @@ class Cells(unittest.TestCase):
         self.assertEqual(archive.best(0.1)['weights'], 4)      # none within: the least cost
         self.assertEqual(archive.best(1.0)['weights'], 2)
         self.assertEqual([member['weights'] for member in archive.near(0.2)], [4])
+        # None is near a limit level this low, so a search starts again from the lowest cost level that holds any.
+        self.assertEqual([member['weights'] for member in archive.near(0.01)], [4])
         # Scored again, two can fall into one cell, and one of them goes.
         archive.rebuild([{'weights': 2, 'reward': 1.0, 'cost': 0.4, 'kept': 1.0}, {'weights': 4, 'reward': 0.9, 'cost': 0.3, 'kept': 1.0}])
         self.assertEqual(len(archive), 1)

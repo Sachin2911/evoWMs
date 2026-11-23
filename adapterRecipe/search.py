@@ -2,7 +2,8 @@
 
 This is the recipe of brainStorming/adapterRecipeDesign.md and of
 implementation/adapterArchitecture.md put together. It starts from an adapter that does
-nothing and ends with one saved adapter.
+nothing and ends with one saved adapter. With --begin steering it starts from steering
+written by hand in the adapter's form, to see what a search adds to that.
 
 One generation, with no simulator:
 
@@ -43,8 +44,9 @@ With an archive (--archive, archive.py):
                     adapter it holds is rolled again in each generation
     current best    the adapter with the most reward at or under the limit level
     the limit level is the imagined cost level that matches the real limit. It moves as
-                    the price does, the other way. When a generation adds nothing to the
-                    archive, the search starts again from an adapter the archive holds
+                    the price does, the other way. After every check, and when a
+                    generation adds nothing to the archive, the search starts again from
+                    an adapter the archive holds near that level
 
 In both ways --damped shrinks the most the price or the level changes each time the real
 cost crosses the limit, and --cautious holds an adapter to its mean cost plus the
@@ -191,7 +193,9 @@ def main():
     parser.add_argument('--size', default='tens', choices=adapters.SIZES, help='of a residual or a mix')
     parser.add_argument('--decisions', type=int, default=10, help='how many decisions the look-ahead of the first forms lasts')
     parser.add_argument('--push', type=float, default=1.0)
-    parser.add_argument('--step', type=float, default=0.3, help='how far from zero the first candidates lie')
+    parser.add_argument('--begin', default='zero', choices=('zero', 'steering'),
+                        help='form memory: the adapter the search starts from')
+    parser.add_argument('--step', type=float, default=0.3, help='how far from that adapter the first candidates lie')
     parser.add_argument('--candidates', type=int, default=16, help='in one generation')
     parser.add_argument('--diagonal', action='store_true', help='CMA-ES with one number per weight in its table')
     parser.add_argument('--starts', type=int, default=256, help='starting states of a generation')
@@ -273,13 +277,16 @@ def main():
     del first_rows, unadapted
 
     zero = np.zeros(adapter.count, np.float32)
+    if args.begin == 'steering' and not remembers:
+        raise SystemExit('--begin steering is for the adapter with memory (--form memory)')
+    begin = adapter.steering() if args.begin == 'steering' else zero
 
     def new_search(centre, seed):
         if args.search == 'random':
             return RandomSearch(centre, args.step, args.candidates, seed)
         return CMA(centre, args.step, args.candidates, seed, diagonal=args.diagonal)
 
-    search = new_search(zero, args.seed)
+    search = new_search(begin, args.seed)
     restarts = 0
     kept = [(failures, args.failures), (lowest, args.lowest)]
     starts, memory = drawn(frozen, latest, kept, args.starts, random)
@@ -291,6 +298,9 @@ def main():
     if archive is not None:
         # The adapter that does nothing is the first the archive holds: as much reward and cost as the unadapted agent.
         archive.rebuild([{'weights': zero, 'reward': 1.0, 'cost': 1.0, 'kept': 1.0}])
+        if args.begin == 'steering':
+            # And the adapter the search starts from. Its cell here is a guess: it is scored in the first generation.
+            archive.rebuild(list(archive.members.values()) + [{'weights': begin, 'reward': 0.5, 'cost': 0.25, 'kept': 0.6}])
     limit_level = LimitLevel(args.limit, unadapted_cost, MOST_THE_PRICE_CHANGES, args.damped)
     print(f'{player.task}, search seed {args.seed}, {args.search}{" with an archive" if args.archive else ""}: '
           f'{adapter.describe()}, {args.candidates} candidates a generation, {args.starts} starting states, '
@@ -403,6 +413,10 @@ def main():
         if archive is not None:
             with open(out / 'archive.jsonl', 'a') as file:
                 file.write(json.dumps({'check': check, 'limit level': limit_level.level, 'cells': archive.table()}) + '\n')
+            # The search starts again near the limit level, which these episodes have just moved.
+            close = archive.near(limit_level.level)
+            restarts += 1
+            search = new_search(close[random.integers(len(close))]['weights'], args.seed + 1000 * restarts)
         (out / 'status.json').write_text(json.dumps({
             'check': check + 1, 'of': args.checks, 'reward': round(record['reward'], 2), 'cost': round(record['cost'], 2)}) + '\n')
         print(f'check {check}, generation {generation}: reward {record["reward"]:.2f}, cost {record["cost"]:.1f} '

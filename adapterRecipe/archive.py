@@ -29,6 +29,12 @@ Why it is built this way:
   much, then the others by how far short they fell. A search that is only told to lower
   cost goes for braking, which is the nearest way down; one that is told this is
   rewarded for every cell, the redirecting ones among them.
+
+  Being told that alone, a search has no reason to go down in cost: it is rewarded as
+  much for a little more reward in a cell far above the limit. So a search starts again,
+  after every round of real episodes, from an adapter near the limit level (near()).
+  The starts are what take the archive down to the limit, and what it is told spreads it
+  over the manners of acting there.
 """
 
 import numpy as np
@@ -108,10 +114,14 @@ class Archive:
         """The adapters a search may start again from: those at most one cost level above the limit level.
 
         Those just above the limit are the ones a search can bring under it. If there is
-        none that low, all of them.
+        none that low, those of the lowest cost level that holds any, which are the
+        nearest the archive has come to the limit.
         """
         close = [member for member in self.members.values() if member['cost'] <= 2 * limit_level]
-        return close or list(self.members.values())
+        if close:
+            return close
+        lowest = max(level for level, _ in self.members)
+        return [member for (level, _), member in self.members.items() if level == lowest]
 
     def table(self):
         """The archive as rows for a record: the cell, and the reward, cost and kept share of its adapter."""
