@@ -30,7 +30,13 @@ if [ -z "$task" ]; then
     exit 1
 fi
 
-bash on_task.sh episodes.py --episodes 80 --out "$EPISODES/$task" --task="$task"
+# A Meta-World task (mw-NAME) is TD-MPC2's: another script plays it, in another image.
+collector=episodes.py
+if [ "${task#mw-}" != "$task" ]; then
+    collector=frozen_tdmpc2.py
+    IMAGE=${ADAPTER_IMAGE:-$HOME/images/tdmpc2.sif}
+fi
+bash on_task.sh "$collector" --episodes 80 --out "$EPISODES/$task" --task="$task"
 if [ "$IMAGE" = none ]; then
     exec python3 cost_predictor.py --episodes "$EPISODES/$task" --train 20 --out "$PREDICTORS/$task"
 fi

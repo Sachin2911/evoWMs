@@ -13,6 +13,9 @@
 #
 #   /datasets/$USER/adapterRecipe/predictors/NAME/cost_predictor.npz
 #
+# A task whose name begins with mw- is a Meta-World task of TD-MPC2: it runs in that
+# agent's image, and its checkpoint is the released single-task agent, mw-NAME-1.pt.
+#
 # So one command serves every task, and a sweep over tasks is a grid over --task:
 #
 #   ../msCli/ms submit --grid "--task=PointGoal1,PointButton1 --seed=0,1,2" -t 6h -n search -- \
@@ -41,7 +44,10 @@ if [ -z "$task" ]; then
     echo "on_task.sh: no --task=NAME among the arguments" >&2
     exit 1
 fi
-if [ "$variant" = dreamerv3 ]; then
+if [ "${task#mw-}" != "$task" ]; then
+    checkpoint=$DATA/tdmpc2_checkpoints/metaworld/$task-1.pt
+    IMAGE=${ADAPTER_IMAGE:-$HOME/images/tdmpc2.sif}
+elif [ "$variant" = dreamerv3 ]; then
     checkpoint=$(ls "$CHECKPOINTS"/*_dreamerv3_safetygym_Safety"$task"-v0_0.ckpt)
 else
     # Some tasks have several, trained with different seeds; the first in name order is taken.
