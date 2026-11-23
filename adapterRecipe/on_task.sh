@@ -13,11 +13,15 @@
 #
 #   ../msCli/ms submit --grid "--task=PointGoal1,PointButton1 --seed=0,1,2" -t 6h -n search -- \
 #       bash on_task.sh search.py --predictor PREDICTOR
+#
+# Off the cluster (vast.sh), ADAPTER_DATA names the folder that stands in for /datasets/$USER,
+# and ADAPTER_IMAGE=none says that python3 itself has everything and there is no image.
 set -euo pipefail
 
-IMAGE=$HOME/images/safeDreamer.sif
-CHECKPOINTS=/datasets/$USER/safedreamer_checkpoints/unsafe_dreamerv3
-PREDICTORS=/datasets/$USER/adapterRecipe/predictors
+DATA=${ADAPTER_DATA:-/datasets/$USER}
+IMAGE=${ADAPTER_IMAGE:-$HOME/images/safeDreamer.sif}
+CHECKPOINTS=$DATA/safedreamer_checkpoints/unsafe_dreamerv3
+PREDICTORS=$DATA/adapterRecipe/predictors
 
 script=$1
 shift
@@ -41,7 +45,10 @@ for argument in "$@"; do
     esac
 done
 
+if [ "$IMAGE" = none ]; then
+    exec env XLA_PYTHON_CLIENT_PREALLOCATE=false python3 "$script" "${arguments[@]}"
+fi
 # --nv gives the container the node's GPU; --bind makes /datasets visible inside it. Without
 # the preallocation setting, the first of several runs on a node takes all of the GPU's memory.
-exec apptainer exec --nv --bind "/datasets/$USER" --env XLA_PYTHON_CLIENT_PREALLOCATE=false "$IMAGE" \
+exec apptainer exec --nv --bind "$DATA" --env XLA_PYTHON_CLIENT_PREALLOCATE=false "$IMAGE" \
     python3 "$script" "${arguments[@]}"

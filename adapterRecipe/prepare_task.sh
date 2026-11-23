@@ -16,9 +16,10 @@
 #   ../msCli/ms submit --grid "--task=CarGoal1,PointPush1" -t 3h -n prepare -- bash prepare_task.sh
 set -euo pipefail
 
-IMAGE=$HOME/images/safeDreamer.sif
-EPISODES=/datasets/$USER/adapterRecipe/episodes
-PREDICTORS=/datasets/$USER/adapterRecipe/predictors
+DATA=${ADAPTER_DATA:-/datasets/$USER}
+IMAGE=${ADAPTER_IMAGE:-$HOME/images/safeDreamer.sif}
+EPISODES=$DATA/adapterRecipe/episodes
+PREDICTORS=$DATA/adapterRecipe/predictors
 
 task=
 for argument in "$@"; do
@@ -30,6 +31,9 @@ if [ -z "$task" ]; then
 fi
 
 bash on_task.sh episodes.py --episodes 80 --out "$EPISODES/$task" --task="$task"
+if [ "$IMAGE" = none ]; then
+    exec python3 cost_predictor.py --episodes "$EPISODES/$task" --train 20 --out "$PREDICTORS/$task"
+fi
 # The predictor is fitted on the CPU, so the container needs no GPU.
-apptainer exec --bind "/datasets/$USER" "$IMAGE" \
+apptainer exec --bind "$DATA" "$IMAGE" \
     python3 cost_predictor.py --episodes "$EPISODES/$task" --train 20 --out "$PREDICTORS/$task"
