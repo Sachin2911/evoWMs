@@ -250,6 +250,7 @@ class Rolls(unittest.TestCase):
         unadapted = imagination.roll(zero, 8, seed=3)
         self.assertEqual(unadapted['cost'].shape, (8, 5))
         self.assertFalse(unadapted['moved'].any())
+        self.assertFalse(unadapted['change'].any())
         np.testing.assert_array_equal(unadapted['size taken'], unadapted['size proposed'])
         # The same seed gives the same roll, and another seed another.
         np.testing.assert_array_equal(imagination.roll(zero, 8, seed=3)['reward'], unadapted['reward'])
@@ -257,6 +258,9 @@ class Rolls(unittest.TestCase):
         weights = np.random.default_rng(7).normal(size=adapter.count).astype(np.float32)
         adapted = imagination.roll(weights, 8, seed=3)
         self.assertTrue(adapted['moved'].any())
+        # The change is how far the action was moved, so it is there exactly where the action was moved.
+        np.testing.assert_array_equal(adapted['change'] > 0, adapted['moved'])
+        self.assertLessEqual(adapted['change'].max(), 2)
         # A roll can start from a memory that is not empty, and then goes another way.
         full = np.full((5, adapter.remembered), 0.9, np.float32)
         self.assertFalse(np.array_equal(imagination.roll(weights, 8, seed=3, memory=full)['reward'], adapted['reward']))
@@ -390,6 +394,20 @@ class Search(unittest.TestCase):
     def test_one_score_cautious_and_damped_without_memory(self):
         final, checks, adapter, files = self.run_search('--cautious', '--damped', '--no-memory')
         self.assertEqual(adapter.count, 132)
+
+    def test_one_score_with_a_hold(self):
+        final, checks, adapter, files = self.run_search('--hold', '--cautious', '--damped', '--diagonal')
+        # The hold starts at 1 and moves at every check, by no more than a factor of 1.5.
+        self.assertEqual(checks[0]['hold'], 1.0)
+        holds = [check['hold'] for check in checks] + [final['hold at the end']]
+        for before, after in zip(holds, holds[1:]):
+            self.assertNotEqual(before, after)
+            self.assertLessEqual(max(after / before, before / after), 1.5 + 1e-9)
+        # Up where the real episodes earned a smaller share than was imagined, down where a larger one.
+        for check, before, after in zip(checks, holds, holds[1:]):
+            self.assertEqual(after > before, check['real reward share'] < check['imagined reward share'])
+        with self.assertRaises(SystemExit):
+            self.run_search('--hold', '--archive')
 
     def test_archive(self):
         final, checks, adapter, files = self.run_search('--archive', '--diagonal')

@@ -37,6 +37,15 @@ With one score (the default):
     the price       goes up if the real episodes cost more than the limit and down if
                     less, by the ratio of the two, but by no more than a factor of 1.5
 
+With one score and --hold, moving the action is charged for as well:
+
+    score           reward share - price x cost share - hold x change
+    change          how far the action taken lies from the proposed one, as a mean over
+                    the roll and the action's numbers
+    the hold        goes up if the real episodes earned a smaller share of the unadapted
+                    agent's reward than the rolls imagined and down if a larger one, by
+                    the ratio of the two, but by no more than a factor of 1.5
+
 With an archive (--archive, archive.py):
 
     score           how the candidate changed the archive, which keeps the adapter with
@@ -52,7 +61,8 @@ With an archive (--archive, archive.py):
 
 In both ways --damped shrinks the most the price or the level changes each time the real
 cost crosses the limit, and --cautious holds an adapter to its mean cost plus the
-standard error.
+standard error. It shrinks the most the hold changes in the same way, each time the real
+reward share crosses the imagined one.
 
 At the end the adapters that played best are finalists. Each plays more episodes, on the
 same seeds as the other finalists, and the one with the most reward among those within the
@@ -63,6 +73,11 @@ Why it is built this way:
 
   No price of cost is set by hand. What is set is the limit, which comes with the task,
   and the price follows from the real episodes.
+
+  A world model is most to be trusted near what its agent does. Where the real episodes
+  earn less than the rolls imagined, the adapter has moved the action further than the
+  model can follow, and the hold makes moving it cost more. Like the price it is set by
+  the real episodes and not by hand.
 
   An adapter is saved together with the predictor it was played with. The predictor
   changes during the search, and the same weights with another predictor are another
@@ -219,6 +234,8 @@ def main():
                         help='hold an adapter to its mean cost plus the standard error, for the price and for the final choice')
     parser.add_argument('--damped', action='store_true',
                         help='the most the price changes at a check shrinks each time the real cost crosses the limit')
+    parser.add_argument('--hold', action='store_true',
+                        help='one score: also charge for moving the action, more when the real reward falls short of the imagined')
     parser.add_argument('--first-seed', type=int, help='of the real episodes (default: 100000 + 1000 x seed)')
     args = parser.parse_args()
 
@@ -270,6 +287,7 @@ def main():
     lowest = None
     cost_behind_predictor = float(sum(episode['cost'].sum() for episode in unadapted))
     unadapted_cost = cost_behind_predictor / len(unadapted)
+    unadapted_reward = float(np.mean([episode['reward'].sum() for episode in unadapted]))
     decisions_an_episode = len(unadapted[0]['cost']) - 1
 
     # The rows the predictor is fitted to: room for every episode the search will play.
@@ -302,6 +320,9 @@ def main():
     seeds = iter(range(100000 + 1000 * args.seed if args.first_seed is None else args.first_seed, 10 ** 9))
     price, generation, checked, cost_paid = 1.0, 0, [], 0.0
     most, was_beyond = MOST_THE_PRICE_CHANGES, None
+    if args.hold and args.archive:
+        raise SystemExit('--hold is for the search with one score')
+    hold, most_hold, was_short = (1.0 if args.hold else 0.0), MOST_THE_PRICE_CHANGES, None
     archive = Archive() if args.archive else None
     if archive is not None:
         # The adapter that does nothing is the first the archive holds: as much reward and cost as the unadapted agent.
@@ -322,7 +343,8 @@ def main():
         return {'reward': float(1 + (earned - usual) / max(abs(usual), 1e-9)),
                 'cost': float(roll['cost'].mean() / max(reference['cost'].mean(), 1e-9)),
                 'kept': float(roll['size taken'].sum() / max(roll['size proposed'].sum(), 1e-9)),
-                'moved': float(roll['moved'].mean())}
+                'moved': float(roll['moved'].mean()),
+                'change': float(roll['change'].mean())}
 
     def played(weights, count):
         """Plays `count` real episodes with the adapter at `weights`; returns their rewards and costs and takes in what they showed."""
@@ -353,7 +375,7 @@ def main():
             asked = search.ask()
             scored = [{'weights': np.asarray(weights, np.float32), **measured(weights, reference, generation)} for weights in asked]
             if archive is None:
-                scores = [one['reward'] - price * one['cost'] for one in scored]
+                scores = [one['reward'] - price * one['cost'] - hold * one['change'] for one in scored]
                 added = None
             else:
                 # Every adapter the archive holds is scored again on this generation's states.
@@ -362,11 +384,12 @@ def main():
                 scores, added = archive.take_in(scored, limit_level.level)
             search.tell(scores)
             top = int(np.argmax(scores))
-            line = {'generation': generation, 'price': price, 'step': float(search.step),
+            line = {'generation': generation, 'price': price, 'hold': hold, 'step': float(search.step),
                     'best score': scores[top], 'best reward share': scored[top]['reward'], 'best cost share': scored[top]['cost'],
                     'mean reward share': float(np.mean([one['reward'] for one in scored])),
                     'mean cost share': float(np.mean([one['cost'] for one in scored])),
                     'mean kept share': float(np.mean([one['kept'] for one in scored])),
+                    'mean change': float(np.mean([one['change'] for one in scored])),
                     'seconds': round(time.perf_counter() - started, 1)}
             if archive is not None:
                 line.update({'limit level': limit_level.level, 'in the archive': len(archive), 'added': added, 'restarts': restarts})
@@ -389,10 +412,13 @@ def main():
         file_name = f'adapters/check_{check:02d}.npz'
         adapters.save(out / file_name, adapter, weights, fixed)
         rewards, costs, seen = played(weights, args.episodes)
-        record = {'check': check, 'generation': generation, 'adapter': file_name, 'price': price, 'limit level': limit_level.level,
+        record = {'check': check, 'generation': generation, 'adapter': file_name, 'price': price, 'hold': hold,
+                  'limit level': limit_level.level,
                   'reward': float(np.mean(rewards)), 'cost': float(np.mean(costs)), 'judged cost': judged(costs, args.cautious),
                   'imagined reward share': imagined['reward'], 'imagined cost share': imagined['cost'],
-                  'imagined kept share': imagined['kept'], 'rewards': rewards, 'costs': costs}
+                  'imagined kept share': imagined['kept'], 'imagined change': imagined['change'],
+                  'real reward share': float(np.mean(rewards)) / unadapted_reward if unadapted_reward > 0 else None,
+                  'rewards': rewards, 'costs': costs}
         checked.append(record)
 
         beyond = record['judged cost'] > args.limit
@@ -400,6 +426,14 @@ def main():
             most = float(np.sqrt(most))
         was_beyond = beyond
         price *= float(np.clip(record['judged cost'] / args.limit, 1 / most, most))
+        if args.hold and record['real reward share'] is not None:
+            # The share of the unadapted agent's reward that was really earned, against the share the rolls imagined.
+            real_share = record['real reward share']
+            short = real_share < imagined['reward']
+            if args.damped and was_short is not None and short != was_short:
+                most_hold = float(np.sqrt(most_hold))
+            was_short = short
+            hold *= float(np.clip(imagined['reward'] / real_share if real_share > 0 else most_hold, 1 / most_hold, most_hold))
         # With an archive the adapter that played is often not at the limit level, so its imagined cost level counts.
         limit_level.moved_by(record['judged cost'], imagined['cost'] if archive is not None else None)
         latest = together([states for states, _ in seen])
@@ -431,7 +465,7 @@ def main():
         print(f'check {check}, generation {generation}: reward {record["reward"]:.2f}, cost {record["cost"]:.1f} '
               f'(imagined shares: reward {imagined["reward"]:.2f}, cost {imagined["cost"]:.2f}, kept {imagined["kept"]:.2f}); '
               + (f'limit level now {limit_level.level:.3f}, {len(archive)} in the archive, {restarts} restarts'
-                 if archive is not None else f'price now {price:.2f}')
+                 if archive is not None else f'price now {price:.2f}' + (f', hold now {hold:.2f}' if args.hold else ''))
               + f', {len(failures["memory"])} costly states kept', flush=True)
 
     # The final choice: the best checked adapters play more, each on the same seeds, and all their episodes count.
@@ -464,6 +498,7 @@ def main():
         'finalists': pooled,
         'generations': generation,
         'price at the end': price,
+        'hold at the end': hold,
         'limit level at the end': limit_level.level,
         'real episodes': {'behind the first predictor': len(began_with), 'played by the search': episodes_played},
         'simulator steps': (len(began_with) + episodes_played) * steps_an_episode,

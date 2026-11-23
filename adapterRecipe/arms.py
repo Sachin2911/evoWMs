@@ -31,7 +31,7 @@ import numpy as np
 
 # The settings of search.py that tell arms apart, with the value that is not worth naming.
 NAMED = (('form', 'memory'), ('no_memory', False), ('archive', False), ('begin', 'zero'), ('look', 'likely'),
-         ('diagonal', False), ('added_on', False), ('no_stop', False), ('cautious', True), ('damped', True),
+         ('diagonal', False), ('added_on', False), ('no_stop', False), ('cautious', True), ('damped', True), ('hold', False),
          ('generations', 10), ('checks', 15), ('episodes', 10), ('candidates', 16), ('starts', 256), ('roll', 40),
          ('step', 0.3), ('lowest', 0.25), ('failures', 0.25), ('keep_predictor', False), ('search', 'cma'), ('limit', 2))
 

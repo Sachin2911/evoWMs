@@ -103,6 +103,7 @@ class Imagination:
                 'reward': reward,
                 'value': frozen.worth(following),
                 'moved': (taken != offered).any(-1),
+                'change': xp.abs(taken - offered).mean(-1),
                 # How large the action taken is and how large the proposed one was, for the share of its size that is kept.
                 'size taken': (taken ** 2).sum(-1) ** 0.5,
                 'size proposed': (offered ** 2).sum(-1) ** 0.5,
@@ -127,6 +128,8 @@ class Imagination:
             reward          the reward predicted for arriving there
             value           the agent's own estimate of the reward still to come from there
             moved           whether the adapter changed the action
+            change          how far the action taken lies from the proposed one, as a mean
+                            over the action's numbers
             size taken      the length of the action taken, and
             size proposed   of the action the agent proposed
         """
@@ -138,7 +141,7 @@ class Imagination:
         states = len(next(iter(state.values())))
         if memory is None:
             memory = self._adapter.start(states) if self._adapter.form == 'memory' else np.zeros((states, 1), np.float32)
-        kept = {name: [] for name in ('cost', 'reward', 'value', 'moved', 'size taken', 'size proposed')}
+        kept = {name: [] for name in ('cost', 'reward', 'value', 'moved', 'change', 'size taken', 'size proposed')}
         for _ in range(decisions):
             came = self._decision(state, memory, fixed, weights)
             state, memory = came['state'], came['memory']
