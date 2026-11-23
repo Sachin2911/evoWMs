@@ -18,6 +18,14 @@ PARTITIONS = {
     "bigbatch": {"max_seconds": 3 * 86400, "max_running": 6, "max_submit": 48},
 }
 DEFAULT_PARTITION = "batch"
+
+# Nodes no job is sent to. Their GPUs cannot draw the simulator's cameras ("Cannot initialize
+# a EGL device display"), and because a failed job frees its node at once, the next job
+# lands on the same node and fails too.
+EXCLUDED_NODES = {
+    "batch": ["mscluster129"],
+    "bigbatch": ["mscluster44", "mscluster65", "mscluster71", "mscluster82"],
+}
 DEFAULT_TIME = "01:00:00"
 
 # A directory with more entries than this is deleted by a job, not on the login node.

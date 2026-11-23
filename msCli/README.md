@@ -86,6 +86,7 @@ Do not use `--multirun` on the cluster; use `--grid`. Hydra does not start on Py
 - **Two folders only:** `/home-mscluster/smohan` and `/datasets/smohan`. A path is resolved on the cluster first, so `..` and symlinks cannot lead outside. The two folders themselves, and `~/.ssh`, cannot be deleted or moved.
 - **Two partitions only:** `batch` and `bigbatch`.
 - **Heavy file work runs as a job:** deleting a folder with more than 2000 entries, and moving anything between the two folders. The command prints the job id.
+- **Nodes that cannot draw are skipped:** every job excludes the nodes in `config.EXCLUDED_NODES`, whose GPUs fail with "Cannot initialize a EGL device display". Add a node there when a job dies on it with that message.
 - **`fetch` skips files over 50 MB** and names them; `--all` includes them.
 - **One SSH attempt, key only.** A failed login is never retried, because the login node bans addresses after a few failures.
 
