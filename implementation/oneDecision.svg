@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 580" width="1140" height="580" role="img" aria-label="At decision t the frozen agent turns the observation into a state and a proposed action. The proposed action, its pushed versions and the zero action are rolled through the frozen world model for H decisions, a fitted cost predictor and the frozen reward and value networks score each imagined state, and the differences are scaled into the look-ahead vector. A one-layer adapter with a bounded output reads that vector and a leaky memory of its own last output and returns a gain and a shift, which are applied to the proposed action.">
+<title>At decision t the frozen agent turns the observation into a state and a proposed action. The proposed action, its pushed versions and the zero action are rolled through the frozen world model for H decisions, a fitted cost predictor and the frozen reward and value networks score each imagined state, and the differences are scaled into the look-ahead vector. A one-layer adapter with a bounded output reads that vector and a leaky memory of its own last output and returns a gain and a shift, which are applied to the proposed action.</title>
+<style>
+  .bg{fill:#ffffff}
+  .band{fill:#eef1f6;stroke:none}
+  .frozen{fill:#e7ebf1;stroke:#1b2330;stroke-width:1.5}
+  .evolved{fill:#fdead2;stroke:#a94e08;stroke-width:2}
+  .fitted{fill:#dce8f8;stroke:#1d5ca6;stroke-width:2}
+  .plain{fill:#ffffff;stroke:#1b2330;stroke-width:1.2;stroke-dasharray:5 3}
+  .edge{fill:none;stroke:#1b2330;stroke-width:1.5}
+  .edge.mem{stroke:#a94e08}
+  .head{fill:#1b2330}
+  .head.mem{fill:#a94e08}
+  .dot{fill:#1b2330}
+  .grid{fill:none;stroke:#c6ced9;stroke-width:1}
+  .cell{fill:#fdead2;stroke:#a94e08;stroke-width:1}
+  .limit{fill:none;stroke:#1b2330;stroke-width:2}
+  text{font-family:Inter,"Segoe UI","Helvetica Neue",Arial,sans-serif}
+  .name{fill:#1b2330;font-size:13px;font-weight:600}
+  .sub{fill:#586474;font-size:11.5px}
+  .tag{fill:#586474;font-size:12px;font-weight:600}
+  .m{fill:#1b2330;font-family:"STIX Two Text","Cambria Math","Times New Roman",serif;font-style:italic;font-size:15.5px}
+  .m .r{font-style:normal}
+  .m .s,.mi .s{font-size:10.5px}
+  .mi{font-family:"STIX Two Text","Cambria Math","Times New Roman",serif;font-style:italic;font-size:15px}
+  .words.lbl{paint-order:stroke;stroke:#ffffff;stroke-width:5px;stroke-linejoin:round}
+  .words.lbl.onband{stroke:#eef1f6}
+  .words{fill:#1b2330;font-size:12px}
+</style>
+<rect class="bg" x="0" y="0" width="1140" height="580"/>
+          <defs>
+            <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head"/></marker>
+            <marker id="b1m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="head mem"/></marker>
+          </defs>
+
+          <!-- row 1: environment, frozen agent, compose -->
+          <rect class="plain" x="20" y="60" width="120" height="70" rx="4"/>
+          <text class="name" x="80" y="91" text-anchor="middle">Environment</text>
+          <text class="sub" x="80" y="110" text-anchor="middle">reward, cost</text>
+
+          <rect class="frozen" x="190" y="60" width="170" height="70" rx="4"/>
+          <text class="name" x="275" y="84" text-anchor="middle">State update</text>
+          <text class="m" x="275" y="110" text-anchor="middle">s<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = (h</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">, z</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">) ∈ ℝ</tspan><tspan class="s" dy="-6">S</tspan></text>
+
+          <rect class="frozen" x="400" y="60" width="160" height="70" rx="4"/>
+          <text class="name" x="480" y="84" text-anchor="middle">Proposal</text>
+          <text class="m" x="480" y="110" text-anchor="middle">ā<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = π</tspan><tspan class="s" dy="4">θ</tspan><tspan dy="-4">(s</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">)</tspan></text>
+
+          <rect class="plain" x="870" y="60" width="240" height="70" rx="4"/>
+          <text class="name" x="990" y="84" text-anchor="middle">Compose</text>
+          <text class="m" x="990" y="110" text-anchor="middle">a<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = </tspan><tspan class="r">clip</tspan>(ā<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ⊙ (1 + g</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">) + δ</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">)</tspan></text>
+
+          <path class="edge" d="M140 95H190" marker-end="url(#b1)"/>
+          <text class="m lbl" x="165" y="86" text-anchor="middle">o<tspan class="s" dy="4">t</tspan></text>
+          <path class="edge" d="M360 95H400" marker-end="url(#b1)"/>
+          <text class="m lbl" x="380" y="86" text-anchor="middle">s<tspan class="s" dy="4">t</tspan></text>
+          <path class="edge" d="M560 95H870" marker-end="url(#b1)"/>
+          <text class="m lbl" x="715" y="86" text-anchor="middle">ā<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ∈ [−1, 1]</tspan><tspan class="s" dy="-6">A</tspan></text>
+
+          <!-- action back to the environment -->
+          <path class="edge" d="M990 60V30H80V60" marker-end="url(#b1)"/>
+          <text class="m lbl" x="620" y="22" text-anchor="middle">a<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ∈ [−1, 1]</tspan><tspan class="s" dy="-6">A</tspan></text>
+          <circle class="dot" cx="275" cy="30" r="3.5"/>
+          <path class="edge" d="M275 30V60" marker-end="url(#b1)"/>
+
+          <!-- row 2: look-ahead -->
+          <rect class="plain" x="390" y="185" width="220" height="60" rx="4"/>
+          <text class="name" x="500" y="207" text-anchor="middle">Held actions</text>
+          <text class="m" x="500" y="232" text-anchor="middle">a<tspan class="s" dy="-6">(j)</tspan><tspan dy="6">,   j = 0, …, 2A + 1</tspan></text>
+          <path class="edge" d="M480 130V185" marker-end="url(#b1)"/>
+          <text class="m lbl" x="488" y="162">ā<tspan class="s" dy="4">t</tspan></text>
+
+          <rect class="frozen" x="190" y="300" width="420" height="80" rx="4"/>
+          <text class="name" x="400" y="324" text-anchor="middle">World model, rolled H decisions for each future</text>
+          <text class="m" x="400" y="355" text-anchor="middle">ŝ<tspan class="s" dy="4">k+1</tspan><tspan class="s" dy="-10">(j)</tspan><tspan dy="6"> = f</tspan><tspan class="s" dy="4">θ</tspan><tspan dy="-4">(ŝ</tspan><tspan class="s" dy="4">k</tspan><tspan class="s" dy="-10">(j)</tspan><tspan dy="6">, a</tspan><tspan class="s" dy="-6">(j)</tspan><tspan dy="6">),   ŝ</tspan><tspan class="s" dy="4">0</tspan><tspan class="s" dy="-10">(j)</tspan><tspan dy="6"> = s</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">,   k = 0, …, H − 1</tspan></text>
+          <path class="edge" d="M275 130V300" marker-end="url(#b1)"/>
+          <text class="m lbl" x="283" y="222">s<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ∈ ℝ</tspan><tspan class="s" dy="-6">S</tspan></text>
+          <path class="edge" d="M500 245V300" marker-end="url(#b1)"/>
+          <text class="m lbl" x="508" y="279">a<tspan class="s" dy="-6">(j)</tspan></text>
+
+          <rect class="fitted" x="680" y="280" width="160" height="50" rx="4"/>
+          <text class="name" x="760" y="300" text-anchor="middle">Cost predictor</text>
+          <text class="m" x="760" y="321" text-anchor="middle">c<tspan class="s" dy="4">φ</tspan><tspan dy="-4">(ŝ)</tspan></text>
+          <rect class="frozen" x="680" y="350" width="160" height="50" rx="4"/>
+          <text class="name" x="760" y="370" text-anchor="middle">Reward, value</text>
+          <text class="m" x="760" y="391" text-anchor="middle">r<tspan class="s" dy="4">θ</tspan><tspan dy="-4">(ŝ),  v</tspan><tspan class="s" dy="4">θ</tspan><tspan dy="-4">(ŝ)</tspan></text>
+          <path class="edge" d="M610 340H645V305H680" marker-end="url(#b1)"/>
+          <path class="edge" d="M645 340V375H680" marker-end="url(#b1)"/>
+          <text class="m lbl" x="628" y="331" text-anchor="middle">ŝ<tspan class="s" dy="4">k</tspan><tspan class="s" dy="-10">(j)</tspan></text>
+
+          <rect class="plain" x="870" y="280" width="240" height="120" rx="4"/>
+          <text class="name" x="990" y="304" text-anchor="middle">Differences and scale</text>
+          <text class="m" x="990" y="334" text-anchor="middle">x<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = [C</tspan><tspan class="s" dy="4">0</tspan><tspan dy="-4">, C</tspan><tspan class="s" dy="4">j</tspan><tspan dy="-4"> − C</tspan><tspan class="s" dy="4">0</tspan><tspan dy="-4">, R</tspan><tspan class="s" dy="4">j</tspan><tspan dy="-4"> − R</tspan><tspan class="s" dy="4">0</tspan><tspan dy="-4">]</tspan></text>
+          <text class="m" x="990" y="363" text-anchor="middle">x̃<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = </tspan><tspan class="r">symlog</tspan>(x<tspan class="s" dy="4">t</tspan><tspan dy="-4"> / σ</tspan><tspan class="s" dy="4">x</tspan><tspan dy="-4">)</tspan></text>
+          <text class="sub" x="990" y="386" text-anchor="middle">over three stretches of the roll</text>
+          <path class="edge" d="M840 305H870" marker-end="url(#b1)"/>
+          <text class="m lbl" x="855" y="296" text-anchor="middle">C<tspan class="s" dy="4">j</tspan></text>
+          <path class="edge" d="M840 375H870" marker-end="url(#b1)"/>
+          <text class="m lbl" x="855" y="366" text-anchor="middle">R<tspan class="s" dy="4">j</tspan></text>
+
+          <!-- row 3: adapter and memory -->
+          <rect class="evolved" x="870" y="470" width="240" height="90" rx="4"/>
+          <text class="name" x="990" y="493" text-anchor="middle">Adapter: one layer</text>
+          <text class="m" x="990" y="520" text-anchor="middle">y<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = </tspan><tspan class="r">tanh</tspan>(W [x̃<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ; m</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">])</tspan></text>
+          <text class="m" x="990" y="545" text-anchor="middle">y<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = (g</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">, δ</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4">) ∈ (−1, 1)</tspan><tspan class="s" dy="-6">2A</tspan></text>
+          <path class="edge" d="M990 400V470" marker-end="url(#b1)"/>
+          <text class="m lbl" x="998" y="441">x̃<tspan class="s" dy="4">t</tspan><tspan dy="-4"> ∈ ℝ</tspan><tspan class="s" dy="-6">3(4A+3)</tspan></text>
+
+          <rect class="evolved" x="520" y="470" width="270" height="90" rx="4"/>
+          <text class="name" x="655" y="493" text-anchor="middle">Leaky memory</text>
+          <text class="m" x="655" y="520" text-anchor="middle">m<tspan class="s" dy="4">t</tspan><tspan dy="-4"> = (1 − α) ⊙ m</tspan><tspan class="s" dy="4">t−1</tspan><tspan dy="-4"> + α ⊙ y</tspan><tspan class="s" dy="4">t−1</tspan></text>
+          <text class="m" x="655" y="545" text-anchor="middle">α = <tspan class="r">sigmoid</tspan>(ρ),   m<tspan class="s" dy="4">0</tspan><tspan dy="-4"> = 0</tspan></text>
+          <path class="edge mem" d="M790 497H870" marker-end="url(#b1m)"/>
+          <text class="m lbl" x="830" y="488" text-anchor="middle">m<tspan class="s" dy="4">t</tspan></text>
+          <path class="edge mem" d="M870 540H790" marker-end="url(#b1m)"/>
+          <text class="m lbl" x="830" y="558" text-anchor="middle">y<tspan class="s" dy="4">t</tspan></text>
+
+          <!-- adapter output to compose -->
+          <path class="edge" d="M1110 515H1126V95H1110" marker-end="url(#b1)"/>
+          <text class="m lbl" x="1118" y="226" text-anchor="end">g<tspan class="s" dy="4">t</tspan><tspan dy="-4">, δ</tspan><tspan class="s" dy="4">t</tspan><tspan dy="-4"> ∈ (−1, 1)</tspan><tspan class="s" dy="-6">A</tspan></text>
+        </svg>
