@@ -28,8 +28,9 @@ import numpy as np
 sys.path.insert(0, os.environ.get('SAFEDREAMER_DIR', '/opt/SafeDreamer'))
 
 # A checkpoint is named like 20240327-144037_dreamerv3_safetygym_SafetyPointGoal1-v0_0.ckpt:
-# when it was saved, the variant, the task, and the seed it was trained with.
-NAME_PATTERN = re.compile(r'_(dreamerv3|bsrp_lag|osrp_lag|osrp)_(safetygym_\w+-v0)_(\d+)\.ckpt$')
+# when it was saved, the variant, the task, and the seed it was trained with. One of
+# SafeDreamer's files has a number between the variant and the task (bsrp_lag_0.0_safetygym_...).
+NAME_PATTERN = re.compile(r'_(dreamerv3|bsrp_lag|osrp_lag|osrp)_(?:[\d.]+_)?(safetygym_\w+-v0)_(\d+)\.ckpt$')
 
 # Settings a variant needs at evaluation time that are not in its checkpoint.
 # OSRP-Lag's Lagrange multiplier is one; 0.1 is the value in SafeDreamer's own evaluation command.

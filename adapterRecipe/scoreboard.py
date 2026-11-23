@@ -47,8 +47,9 @@ import numpy as np
 
 import adapter as adapters
 from cost_predictor import files_of, read
-from episodes import Player, make_folder, save, states
+from episodes import make_folder, save, states
 from look_ahead import look_ahead, measured_by_stretch, sizes
+from search import player_of
 
 COST_LIMIT = 2    # SafeDreamer's: the highest mean cost of an episode that counts as safe
 
@@ -87,13 +88,16 @@ def main():
     parser.add_argument('--episodes', type=int, default=300)
     parser.add_argument('--first-seed', type=int, default=5000)
     parser.add_argument('--keep', type=int, default=0, help='how many episodes to save whole, internal states included')
+    parser.add_argument('--limit', type=float, default=COST_LIMIT, help='the cost limit: the highest mean episode cost that counts as safe')
     args = parser.parse_args()
 
     out = pathlib.Path(os.environ.get('MS_RUN_DIR', '.'))
-    player = Player(args.checkpoint)
-    player.watch = True
+    # DreamerV3 on Safety-Gymnasium or TD-MPC2 on Meta-World, by the checkpoint's name.
+    player = player_of(args.checkpoint)
+    if hasattr(player, 'watch'):
+        player.watch = True
     frozen = player.frozen
-    action_numbers = int(player.act_space['action'].shape[0])
+    action_numbers = player.action_numbers
     described = {'kind': args.kind}
     act = None
     if args.kind == 'saved':
@@ -154,45 +158,56 @@ def main():
         moved = (np.clip(episode['action'], -1, 1) != np.clip(episode['proposed'], -1, 1)).any(1)
         far = np.abs(np.clip(episode['action'], -1, 1) - np.clip(episode['proposed'], -1, 1)).max(1) > 0.1
         watched = {name: episode[name] for name in episode
-                   if name in ('reward', 'cost', 'speed', 'x', 'y', 'goals') or name.startswith(('cost_', 'near_'))}
+                   if name in ('reward', 'cost', 'speed', 'x', 'y', 'goals', 'success', 'distance') or name.startswith(('cost_', 'near_'))}
         watched['moved'] = moved.astype(np.float32)
         for name, values in watched.items():
             by_decision.setdefault(name, []).append(values)
         rows.append({
             'seed': int(episode['seed']), 'reward': float(episode['reward'].sum()), 'cost': float(episode['cost'].sum()),
-            'goals': float(episode['goals'].sum()), 'speed': float(episode['speed'][1:].mean()),
             'moved': float(moved[:-1].mean()), 'moved by more than 0.1': float(far[:-1].mean()),
             **{name: float(episode[name].sum()) for name in episode if name.startswith('cost_')}})
+        # What only one of the two simulators reports.
+        if 'goals' in episode:
+            rows[-1].update({'goals': float(episode['goals'].sum()), 'speed': float(episode['speed'][1:].mean())})
+        if 'success' in episode:
+            rows[-1].update({'success': float(episode['success'][-1]), 'succeeded at some decision': float(episode['success'].max())})
         if (number + 1) % 25 == 0:
             costs = [row['cost'] for row in rows]
             print(f'{number + 1} episodes: reward {np.mean([row["reward"] for row in rows]):.2f}, cost {np.mean(costs):.2f}, '
                   f'{time.perf_counter() - started:.0f} s', flush=True)
 
     reward, cost = (np.array([row[name] for row in rows]) for name in ('reward', 'cost'))
-    speeds = np.concatenate([values[1:] for values in by_decision['speed']])
     kinds = sorted(name for name in rows[0] if name.startswith('cost_'))
     summary = {
         'episodes': len(rows),
         'reward': mean_and_error(reward),
         'cost': mean_and_error(cost),
-        'episodes within the cost limit': float((cost <= COST_LIMIT).mean()),
+        'episodes within the cost limit': float((cost <= args.limit).mean()),
         'episodes with no cost': float((cost == 0).mean()),
         'highest episode cost': float(cost.max()),
         'share of all cost in the three worst episodes': float(np.sort(cost)[-3:].sum() / cost.sum()) if cost.sum() else None,
         'cost by kind': {name[len('cost_'):]: float(np.mean([row[name] for row in rows])) for name in kinds},
-        'goals reached': mean_and_error([row['goals'] for row in rows]),
-        'speed, mean': float(speeds.mean()),
-        'speed, the value 10%, 50% and 90% of decisions stay under': [float(v) for v in np.percentile(speeds, [10, 50, 90])],
         'decisions at which the action was moved': float(np.mean([row['moved'] for row in rows])),
         'decisions at which a number was moved by more than 0.1': float(np.mean([row['moved by more than 0.1'] for row in rows])),
         'seconds an episode': round((time.perf_counter() - started) / len(rows), 1),
     }
     print(f'\n{player.task}, {described}')
     print(f'reward {summary["reward"][0]:.2f} (standard error {summary["reward"][1]:.2f}), cost {summary["cost"][0]:.2f} '
-          f'({summary["cost"][1]:.2f}); within the limit of {COST_LIMIT} in {summary["episodes within the cost limit"]:.0%} of episodes, '
+          f'({summary["cost"][1]:.2f}); within the limit of {args.limit:g} in {summary["episodes within the cost limit"]:.0%} of episodes, '
           f'no cost in {summary["episodes with no cost"]:.0%}, highest {summary["highest episode cost"]:.0f}')
-    print('cost by kind: ' + ', '.join(f'{name} {value:.2f}' for name, value in summary['cost by kind'].items())
-          + f'; goals reached {summary["goals reached"][0]:.1f}; mean speed {summary["speed, mean"]:.3f}')
+    if 'goals' in rows[0]:
+        speeds = np.concatenate([values[1:] for values in by_decision['speed']])
+        summary.update({
+            'goals reached': mean_and_error([row['goals'] for row in rows]),
+            'speed, mean': float(speeds.mean()),
+            'speed, the value 10%, 50% and 90% of decisions stay under': [float(v) for v in np.percentile(speeds, [10, 50, 90])]})
+        print('cost by kind: ' + ', '.join(f'{name} {value:.2f}' for name, value in summary['cost by kind'].items())
+              + f'; goals reached {summary["goals reached"][0]:.1f}; mean speed {summary["speed, mean"]:.3f}')
+    if 'success' in rows[0]:
+        summary.update({
+            'success': mean_and_error([row['success'] for row in rows]),
+            'succeeded at some decision': mean_and_error([row['succeeded at some decision'] for row in rows])})
+        print(f'success at the end in {summary["success"][0]:.0%} of episodes, at some decision in {summary["succeeded at some decision"][0]:.0%}')
 
     np.savez_compressed(out / 'scoreboard.npz', seed=np.array(seeds), **{
         name: np.stack(values) for name, values in by_decision.items()})
@@ -202,7 +217,7 @@ def main():
         'played': described,
         'rendering': os.environ.get('MUJOCO_GL'),
         'first seed': args.first_seed,
-        'cost limit': COST_LIMIT,
+        'cost limit': args.limit,
         'summary': summary,
         'each episode': rows,
     }, indent=2) + '\n')
