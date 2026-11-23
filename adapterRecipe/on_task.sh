@@ -4,6 +4,10 @@
 #   bash on_task.sh search.py --seed 0 --predictor PREDICTOR --task=PointGoal1
 #
 # --task=NAME is replaced by --checkpoint and the reward-only checkpoint of that task.
+# --baseline-task=NAME is replaced by --checkpoint and SafeDreamer's own BSRP-Lag checkpoint
+# of that task, for playing the baseline on the same seeds:
+#
+#   bash on_task.sh ../safeDreamerBaselines/evaluate.py --episodes 300 --first-seed 5000 --baseline-task=PointGoal1
 # In every other argument the word TASK is replaced by the task's name, and the word
 # PREDICTOR by the task's cost predictor, which is kept in one place for every task:
 #
@@ -28,18 +32,26 @@ shift
 
 task=
 for argument in "$@"; do
-    case "$argument" in --task=*) task=${argument#--task=} ;; esac
+    case "$argument" in
+        --task=*) task=${argument#--task=}; variant=dreamerv3 ;;
+        --baseline-task=*) task=${argument#--baseline-task=}; variant=bsrp_lag ;;
+    esac
 done
 if [ -z "$task" ]; then
     echo "on_task.sh: no --task=NAME among the arguments" >&2
     exit 1
 fi
-checkpoint=$(ls "$CHECKPOINTS"/*_dreamerv3_safetygym_Safety"$task"-v0_0.ckpt)
+if [ "$variant" = dreamerv3 ]; then
+    checkpoint=$(ls "$CHECKPOINTS"/*_dreamerv3_safetygym_Safety"$task"-v0_0.ckpt)
+else
+    # Some tasks have several, trained with different seeds; the first in name order is taken.
+    checkpoint=$(ls "$DATA"/safedreamer_checkpoints/safedreamer_bsrplag/*_bsrp_lag_*safetygym_Safety"$task"-v0_*.ckpt | head -1)
+fi
 
 arguments=()
 for argument in "$@"; do
     case "$argument" in
-        --task=*) arguments+=(--checkpoint "$checkpoint") ;;
+        --task=*|--baseline-task=*) arguments+=(--checkpoint "$checkpoint") ;;
         PREDICTOR) arguments+=("$PREDICTORS/$task/cost_predictor.npz") ;;
         *) arguments+=("${argument//TASK/$task}") ;;
     esac
