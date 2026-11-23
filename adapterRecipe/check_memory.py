@@ -151,9 +151,9 @@ def main():
     carried = all(np.array_equal(calls[entry + 1][0], calls[entry][2]) for entry in range(len(calls) - 1))
     # An episode has one more entry than it has decisions. A player that does not ask the
     # adapter at the last entry saves there the memory the last decision handed on.
-    read = np.concatenate([held for held, _, _ in calls])
-    saved_as_read = (np.array_equal(episode['memory'][:len(read)], read)
-                     and all(np.array_equal(row[None], calls[-1][2]) for row in episode['memory'][len(read):]))
+    as_read = np.concatenate([held for held, _, _ in calls])
+    saved_as_read = (np.array_equal(episode['memory'][:len(as_read)], as_read)
+                     and all(np.array_equal(row[None], calls[-1][2]) for row in episode['memory'][len(as_read):]))
     # The episode keeps an action in the agent's half digits, so the last digits of the two can differ.
     action_gap = float(np.abs(np.concatenate([action for _, action, _ in calls])[:entries] - episode['action'][:entries]).max())
     held_to('remembered', carried and saved_as_read and action_gap < 1e-3 and not episode['memory'][0].any(),
