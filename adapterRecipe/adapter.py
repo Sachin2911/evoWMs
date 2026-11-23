@@ -1,0 +1,219 @@
+"""The adapter: a small set of weights that changes the action the frozen agent proposes.
+
+An adapter sees one decision at a time. It is given the agent's internal state and the
+action the agent proposed, and gives back the action to take. It never changes the agent,
+and with every weight at zero it gives back the proposed action untouched
+(brainStorming/adapterRecipeDesign.md, decisions 3 and 4).
+
+Its form is how it acts:
+
+    residual   It works out a gain and a shift for every action number and takes
+                   proposed x (1 + gain) + shift
+               clipped to the limits of the action.
+    re-rank    It asks the frozen agent for further actions in the same state, imagines
+               holding each one as look_ahead.py does, and takes the one with the highest
+               score. The proposed action scores 0 and is kept unless another scores higher.
+    mix        A re-rank in which the action of a residual is one more candidate.
+
+Its size is how a residual gets its gains and shifts:
+
+    tens        a weighted sum of the look-ahead numbers
+    hundreds    a small network on the look-ahead numbers, with one hidden layer
+    thousands   a weighted sum of a few mixtures of the raw internal state. Which mixtures
+                is part of the weights (a low-rank map)
+
+The score of a candidate in a re-rank or a mix is
+
+    reward weight x its reward change  -  cost weight x its cost change
+
+where both changes are against holding the proposed action and are divided by the sizes
+that look_ahead.sizes() measured. These two weights are all the weights a re-rank has.
+
+The weights come as one row, which is what a search works with. With A action numbers and
+S state numbers:
+
+    residual, tens        (4A + 2) x 2A                    40 for A = 2
+    residual, hundreds    16 x (4A + 2) + 2A x 17         228
+    residual, thousands   S + 2A + 2A                   2,824 for S = 2,816
+    re-rank               2
+    mix                   the residual's, then the 2 of the re-rank
+
+In a residual of size tens the row is a table with one line per output, first the gains and
+then the shifts. A line has one weight per look-ahead number, in the order of
+look_ahead.names(), and a last weight that is added on.
+
+Why it is built this way:
+
+  The agent's action numbers can lie beyond the limits, because it draws them from a bell
+  curve. The simulator and the world model both clip them, so the adapter works with the
+  clipped action. But where it leaves an action number where it was, it hands back the
+  agent's own number, unclipped. The world model clips by a multiplication that can be off
+  in the last digit, so a clipped copy would not be exactly what the unadapted agent hands
+  over, and an episode would no longer replay exactly.
+
+  A gain and a shift have no bound of their own. The limits of the action are the only
+  bound, which leaves no value to set. check_look_ahead_real.py found the world model about
+  as right about an action pushed to its limit as about the proposed one.
+
+  The look-ahead numbers are divided by sizes measured on the unadapted agent's episodes,
+  and nothing is subtracted from them. A number that is zero stays zero, so an adapter of
+  size tens whose added-on weights are zero does nothing where no push changes anything.
+  The raw state is not scaled: its numbers already lie between -1 and 1.
+
+  A re-rank asks for as many further actions as the look-ahead has pushes, 2A. It then
+  imagines as many futures at a decision as a residual does.
+"""
+
+from look_ahead import hold, look_ahead
+
+FORMS = ('residual', 're-rank', 'mix')
+SIZES = ('tens', 'hundreds', 'thousands')
+
+
+class Adapter:
+    """An adapter without its weights: its form, its size and its settings.
+
+    form             'residual', 're-rank' or 'mix'
+    size             'tens', 'hundreds' or 'thousands'; None for a re-rank, which has no residual
+    action_numbers   how many numbers an action has (A)
+    state_numbers    how many numbers FrozenDreamer.numbers gives for a state (S)
+    decisions        how many decisions the imagined futures last
+    push             how far the look-ahead pushes a number towards its limit
+    draws            how many further actions a re-rank or a mix asks the agent for (default 2A)
+    hidden           the hidden units of size hundreds
+    mixtures         the mixtures of the state that size thousands uses
+
+    `count` is the number of weights.
+    """
+
+    def __init__(self, form, size, action_numbers, state_numbers, decisions, push=1.0,
+                 draws=None, hidden=16, mixtures=1):
+        if form not in FORMS or size not in ((None,) if form == 're-rank' else SIZES):
+            raise ValueError(f'there is no adapter of form {form} and size {size}')
+        self.form, self.size = form, size
+        self.action_numbers = action_numbers
+        self.decisions, self.push = decisions, push
+        self.draws = 2 * action_numbers if draws is None else draws
+        self.hidden, self.mixtures = hidden, mixtures
+        # What a residual reads, and how many weights turn that into a gain and a shift per action number.
+        outputs = 2 * action_numbers
+        look_ahead_numbers = 4 * action_numbers + 1
+        self._inputs = {None: 0, 'tens': look_ahead_numbers, 'hundreds': look_ahead_numbers,
+                        'thousands': state_numbers}[size]
+        self._in_residual = {
+            None: 0,
+            'tens': (self._inputs + 1) * outputs,
+            'hundreds': hidden * (self._inputs + 1) + outputs * (hidden + 1),
+            'thousands': mixtures * (self._inputs + outputs) + outputs,
+        }[size]
+        self.count = self._in_residual + (0 if form == 'residual' else 2)
+
+    def describe(self):
+        """The settings and the number of weights, for the record of a run."""
+        settings = {'form': self.form, 'size': self.size, 'weights': self.count, 'decisions': self.decisions}
+        if self.size in ('tens', 'hundreds'):
+            settings['push'] = self.push
+        if self.size == 'hundreds':
+            settings['hidden units'] = self.hidden
+        if self.size == 'thousands':
+            settings['mixtures'] = self.mixtures
+        if self.form != 'residual':
+            settings['further actions'] = self.draws
+        return settings
+
+    def _gains_and_shifts(self, weights, inputs):
+        """What a residual's weights make of its inputs: a gain and a shift per action number, for every state."""
+        import jax.numpy as jnp
+
+        outputs = 2 * self.action_numbers
+        if self.size == 'tens':
+            table = weights.reshape(outputs, self._inputs + 1)
+            out = inputs @ table[:, :-1].T + table[:, -1]
+        elif self.size == 'hundreds':
+            first, second = jnp.split(weights, [self.hidden * (self._inputs + 1)])
+            first = first.reshape(self.hidden, self._inputs + 1)
+            second = second.reshape(outputs, self.hidden + 1)
+            # tanh keeps each hidden unit between -1 and 1, and gives 0 for 0.
+            hidden = jnp.tanh(inputs @ first[:, :-1].T + first[:, -1])
+            out = hidden @ second[:, :-1].T + second[:, -1]
+        else:
+            mixing, spreading, added = jnp.split(
+                weights, [self.mixtures * self._inputs, self.mixtures * (self._inputs + outputs)])
+            mixed = inputs @ mixing.reshape(self.mixtures, self._inputs).T
+            out = mixed @ spreading.reshape(outputs, self.mixtures).T + added
+        return out[:, :self.action_numbers], out[:, self.action_numbers:]
+
+    def decide(self, frozen, fixed, weights, state, proposed):
+        """The action to take in every state of a batch, with what was worked out on the way.
+
+        It is written with the pieces of frozen_agent.py, so it has to be called from a
+        function that was passed to FrozenDreamer.compiled; compiled() below does that.
+
+        fixed      what is measured and never searched: `predictor`, the cost predictor's
+                   weights, offset and mean_cost, and `sizes`, from look_ahead.sizes()
+        weights    the adapter's `count` weights, in one row
+        state      the internal states, one row each
+        proposed   the action the frozen agent proposed in each
+
+        Returns `action`. A re-rank or a mix also returns, with one row per candidate and
+        one column per state:
+
+            candidates   the actions it chose among. Row 0 is the proposed action; in a
+                         mix row 1 is the residual's; the rest are the agent's further actions
+            cost         the expected cost of holding each candidate
+            reward       the reward of holding it, with the value estimate of the last state
+            chosen       which candidate was taken in each state
+        """
+        import jax.numpy as jnp
+
+        if weights.shape != (self.count,):
+            raise ValueError(f'this adapter has {self.count} weights, and was given an array of shape {weights.shape}')
+        predictor, sizes = fixed['predictor'], fixed['sizes']
+        state = {name: state[name] for name in ('deter', 'stoch')}
+        proposed = proposed.astype(jnp.float32)
+        held = jnp.clip(proposed, -1, 1)
+        candidates = [proposed]
+
+        if self.form != 're-rank':
+            if self.size == 'thousands':
+                inputs = frozen.numbers(state)
+            else:
+                inputs = look_ahead(frozen, predictor, state, proposed, self.decisions, self.push) / sizes
+            gain, shift = self._gains_and_shifts(weights[:self._in_residual], inputs)
+            moved = jnp.clip(held * (1 + gain) + shift, -1, 1)
+            # A number that is left where it was is handed back as the agent gave it.
+            residual = jnp.where(moved == held, proposed, moved)
+            if self.form == 'residual':
+                return {'action': residual}
+            candidates.append(residual)
+
+        # Further actions from the frozen agent, each drawn as it drew the proposed one.
+        repeated = {name: jnp.concatenate([part] * self.draws) for name, part in state.items()}
+        drawn = frozen.propose(repeated).astype(jnp.float32).reshape((self.draws,) + proposed.shape)
+        candidates = jnp.concatenate([jnp.stack(candidates), drawn])
+        imagined = hold(frozen, predictor, state, jnp.clip(candidates, -1, 1), self.decisions)
+        cost = imagined['cost']
+        # The value estimate stands for the reward still to come after the last imagined decision.
+        reward = imagined['reward'] + imagined['value']
+        reward_weight, cost_weight = weights[-2], weights[-1]
+        # sizes[1] is the size of a cost change and sizes[-1] that of a reward change.
+        score = reward_weight * (reward - reward[:1]) / sizes[-1] - cost_weight * (cost - cost[:1]) / sizes[1]
+        # Of equal scores the first is taken, so the proposed action stays unless another scores higher.
+        chosen = jnp.argmax(score, 0)
+        action = candidates[chosen, jnp.arange(chosen.shape[0])]
+        return {'action': action, 'candidates': candidates, 'cost': cost, 'reward': reward, 'chosen': chosen}
+
+    def compiled(self, frozen, everything=False):
+        """This adapter as a function of plain arrays, called as (state, proposed, fixed, weights).
+
+        It gives the action to take, or with `everything` all that decide() returns. With
+        the weights filled in, it is an adapter as Player.play takes one:
+
+            act = adapter.compiled(frozen)
+            player.play(seeds, adapter=lambda state, proposed: act(state, proposed, fixed, weights))
+        """
+        def adapt(state, proposed, fixed, weights):
+            worked_out = self.decide(frozen, fixed, weights, state, proposed)
+            return worked_out if everything else worked_out['action']
+
+        return frozen.compiled(adapt)

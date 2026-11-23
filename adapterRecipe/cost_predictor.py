@@ -128,11 +128,24 @@ def read(file, checkpoint):
     trained = json.loads(file.with_suffix('.json').read_text())
     if trained['checkpoint'] != pathlib.Path(checkpoint).name:
         raise SystemExit(f'the predictor was trained on the states of {trained["checkpoint"]}')
-    first, last, count = trained['files']['test']
-    files = sorted(pathlib.Path(trained['episodes']).glob('seed_*.npz'))[:count]
-    if not files or [files[0].name, files[-1].name] != [first, last]:
-        raise SystemExit(f'the test episodes of the predictor are no longer in {trained["episodes"]}')
-    return predictor, trained, files
+    return predictor, trained, files_of(trained, 'test')
+
+
+def files_of(trained, part):
+    """The episode files that were one part of a predictor's episodes: 'test', 'validation' or 'training'.
+
+    `trained` is what was recorded when the predictor was trained, as read() returns it.
+    """
+    # The parts lie one after another in seed order, as main() split them.
+    files = sorted(pathlib.Path(trained['episodes']).glob('seed_*.npz'))
+    for name in ('test', 'validation', 'training'):
+        first, last, count = trained['files'][name]
+        chosen, files = files[:count], files[count:]
+        if name == part:
+            break
+    if not chosen or [chosen[0].name, chosen[-1].name] != [first, last]:
+        raise SystemExit(f'the {part} episodes of the predictor are no longer in {trained["episodes"]}')
+    return chosen
 
 
 def misfit(scores, costly):

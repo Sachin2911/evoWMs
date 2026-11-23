@@ -15,7 +15,8 @@ of the last state, for the reward still to come after it. The adapter gets 4A + 
     how much each push changes the expected cost               2A
     how much each push changes the reward                      2A
 
-names() gives their order, and futures() gives the imagined futures themselves.
+names() gives their order. pushed() gives the actions that are held, hold() imagines holding
+any actions, and sizes() measures how large the numbers usually are.
 
 Why it is built this way:
 
@@ -48,22 +49,41 @@ def names(action_numbers):
             + [f'reward change, {push}' for push in pushes])
 
 
-def futures(frozen, predictor, state, proposed, decisions, push=1.0):
-    """Imagines the 2A + 1 futures of every state of a batch.
+def pushed(proposed, push=1.0):
+    """The 2A + 1 actions the look-ahead holds, for every state of a batch.
 
-    Like look_ahead() below, it is written with the pieces of frozen_agent.py, so it has to
-    be called from a function that was passed to FrozenDreamer.compiled.
+    proposed    the action the frozen agent proposed in each state
+    push        how far a number is pushed towards its limit: 1 is all the way, 0.5 half way
+
+    Returns one row per future and one column per state. Row 0 is the proposed action; then
+    number 0 pushed up, number 0 pushed down, and so on.
+    """
+    import jax.numpy as jnp
+
+    action_numbers = proposed.shape[1]
+    # The simulator clips an action to its limits, so the future is imagined with the clipped one.
+    held = jnp.clip(proposed.astype(jnp.float32), -1, 1)
+    actions = [held]
+    for number in range(action_numbers):
+        for limit in (1.0, -1.0):
+            moved = held[:, number] + push * (limit - held[:, number])
+            actions.append(jnp.concatenate([held[:, :number], moved[:, None], held[:, number + 1:]], -1))
+    return jnp.stack(actions)
+
+
+def hold(frozen, predictor, state, actions, decisions):
+    """Imagines holding each of `actions` for `decisions` decisions, from every state of a batch.
+
+    It is written with the pieces of frozen_agent.py, as is everything else here that takes
+    `frozen`, so it has to be called from a function that was passed to FrozenDreamer.compiled.
 
     predictor   the cost predictor's weights, offset and mean_cost
     state       the internal states, one row each
-    proposed    the action the frozen agent proposed in each
+    actions     the actions to hold, one row per future and one column per state
     decisions   how many decisions each future lasts
-    push        how far a number is pushed towards its limit: 1 is all the way, 0.5 half way
 
-    Returns four arrays with one row per future and one column per state. The proposed
-    action's own future is row 0; then number 0 pushed up, number 0 pushed down, and so on.
+    Returns three arrays with one row per future and one column per state:
 
-        action   the action that is held
         cost     the expected cost, added up over the decisions
         reward   the predicted reward, added up over the decisions
         value    the value estimate of the last state
@@ -71,19 +91,10 @@ def futures(frozen, predictor, state, proposed, decisions, push=1.0):
     import jax.numpy as jnp
     from cost_predictor import expected_cost
 
-    states, action_numbers = proposed.shape
-    # The simulator clips an action to its limits, so the future is imagined with the clipped one.
-    held = jnp.clip(proposed.astype(jnp.float32), -1, 1)
-    actions = [held]
-    for number in range(action_numbers):
-        for limit in (1.0, -1.0):
-            pushed = held[:, number] + push * (limit - held[:, number])
-            actions.append(jnp.concatenate([held[:, :number], pushed[:, None], held[:, number + 1:]], -1))
-
+    count, states, action_numbers = actions.shape
     # All the futures of all the states are rolled together, as one batch: first every
     # state with its first future, then every state with its second, and so on.
-    count = len(actions)
-    actions = jnp.concatenate(actions)
+    actions = actions.reshape(count * states, action_numbers)
     state = {name: jnp.concatenate([part] * count) for name, part in state.items()}
     cost = reward = 0.0
     for _ in range(decisions):
@@ -91,15 +102,45 @@ def futures(frozen, predictor, state, proposed, decisions, push=1.0):
         cost = cost + expected_cost(predictor, frozen.numbers(state))
         reward = reward + frozen.reward(state).astype(jnp.float32)
     value = frozen.value(state).astype(jnp.float32)
-    return {'action': actions.reshape(count, states, action_numbers), 'cost': cost.reshape(count, states),
-            'reward': reward.reshape(count, states), 'value': value.reshape(count, states)}
+    return {'cost': cost.reshape(count, states), 'reward': reward.reshape(count, states),
+            'value': value.reshape(count, states)}
+
+
+def futures(frozen, predictor, state, proposed, decisions, push=1.0):
+    """Imagines the 2A + 1 futures of every state of a batch.
+
+    Returns what pushed() gives, as `action`, with what hold() gives for those actions.
+    """
+    actions = pushed(proposed, push)
+    return {'action': actions, **hold(frozen, predictor, state, actions, decisions)}
 
 
 def look_ahead(frozen, predictor, state, proposed, decisions, push=1.0):
-    """The 4A + 1 numbers an adapter reads, for every state of a batch. The arguments are those of futures()."""
+    """The 4A + 1 numbers an adapter reads, for every state of a batch. The arguments are those of pushed() and hold()."""
     import jax.numpy as jnp
     imagined = futures(frozen, predictor, state, proposed, decisions, push)
     cost = imagined['cost']
     # The value estimate stands for the reward still to come after the last imagined decision.
     reward = imagined['reward'] + imagined['value']
     return jnp.concatenate([cost[:1], cost[1:] - cost[:1], reward[1:] - reward[:1]]).T
+
+
+def sizes(inputs):
+    """The typical size of each look-ahead number, measured over many decisions. An adapter divides by it.
+
+    inputs    the numbers of look_ahead(), one row per decision
+
+    Three sizes are measured, each a root mean square: of the expected cost of holding, of
+    the cost changes, and of the reward changes. All the pushes share one size, so a push
+    that the model expects to matter twice as much as another still reads twice as large.
+    Nothing is subtracted, so a number that is zero stays zero.
+    """
+    import numpy as np
+
+    action_numbers = (inputs.shape[1] - 1) // 4
+    measured = np.empty(inputs.shape[1], np.float32)
+    for group in (slice(0, 1), slice(1, 1 + 2 * action_numbers), slice(1 + 2 * action_numbers, None)):
+        measured[group] = np.sqrt(np.mean(np.square(inputs[:, group], dtype=np.float64)))
+    if not (measured > 0).all():
+        raise SystemExit('a group of look-ahead numbers is zero at every decision, so it has no size to divide by')
+    return measured
