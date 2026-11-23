@@ -42,6 +42,7 @@ The reasoning uses three kinds of statement, labelled where it matters:
 **Why.**
 
 - **Fact:** DreamerV3 and TD-MPC2 both have these five pieces. They differ in what proposes the action: an actor network in DreamerV3, a planner in TD-MPC2.
+- **Fact:** TD-MPC2 also has a policy network beside its planner. It guides the planner and is cheap to ask, so imagined futures in which the agent goes on acting are affordable for both agents.
 - **Fact:** neither agent has anything for cost, so some cost signal has to be added. A small predictor reading the frozen internal state is the smallest addition that provides one.
 - The paper's second part applies the same recipe to TD-MPC2. If the recipe read pieces only DreamerV3 has (the split of its state into continuous and categorical parts, its image decoder, the meaning of the Point robot's two action numbers), the second part would test a different method from the first.
 - The claim "this works on frozen world-model agents" is only as wide as what the recipe assumes about them.
@@ -65,6 +66,13 @@ The reasoning uses three kinds of statement, labelled where it matters:
 - **Fact:** the look-ahead is in effect a numerical gradient of predicted cost with respect to the action. An adapter on top of it only has to learn how far to move along that gradient.
 - That makes the recipe open to the objection that the input design does the work and evolution adds little. **Observation:** the earlier draft paper had this weakness.
 - An adapter on the raw state gets no such help. Running both shows how much of the result comes from the inputs and how much from the search.
+
+**Changes to try, one at a time.**
+
+- *Several lengths at once.* A roll-out to 15 decisions passes 5 and 10 on the way, so the sums at all three lengths cost no further roll-outs. Reading all three removes the look-ahead length as a hand-set value (decision 6). It triples the inputs: 27 for two action numbers.
+- *The adapter's own previous output.* With it as an input, a residual can keep turning the way it turned at the last decision (decision 3).
+- *An average over a few drawn roll-outs*, with the same random numbers for every pushed future, in place of the single most likely roll-out. **Observation:** on PointButton1 the most likely roll-out expects 26% to 47% too much cost at 10 to 15 decisions. If this is adopted, it is adopted for every task.
+- *Carrying on after a push.* The look-ahead holds the pushed action for the whole future. The other way is to push for a moment and let the agent act from there, which both agents can do cheaply (decision 1). **Assumption:** that shows too little, because the agent that carries on is the reward-only agent and heads back to the hazard. Holding stands in for an adapter that keeps pushing. Both are measured.
 
 **Set aside.**
 
@@ -103,6 +111,8 @@ The reasoning uses three kinds of statement, labelled where it matters:
 
 **Rests on.** The three observations, from code that has not been reviewed.
 
+**What the search is aimed at.** **Assumption:** steering loses its reward, and has its rare very costly episodes, in stalls in front of a hazard. Where both sides look alike its shift is small, or changes side from one decision to the next, and the robot stands still. A re-rank takes one action outright, so it commits to a side, and its score counts reward. It is built first for that reason. A residual can commit if it reads its own previous output (decision 2).
+
 **The comparison.** Same inputs, same budget, same tasks and same search. Only the form differs.
 
 ## 4. How large the adapter is
@@ -115,7 +125,7 @@ The reasoning uses three kinds of statement, labelled where it matters:
 
 **Why.**
 
-- **Fact:** for the weighted-sum form, the number of weights is (inputs + 1) × 2 × action numbers.
+- **Fact:** for the weighted-sum form, the number of weights is (inputs + 1) × 2 × action numbers. That is 40 for two action numbers. If the look-ahead is read at three lengths (decision 2) it is 112, and 416 for four action numbers, so the smallest size is then about a hundred weights.
 - **Fact:** CMA-ES learns how weights interact using a table that grows with the square of their number. That is practical up to the low thousands. Beyond that only a simplified version is usable, which ignores the interactions. The number of candidates needed also grows with the number of weights.
 - So size trades what the adapter can express against what the search can afford. Argument cannot place the best point, which is why it is a factor.
 - *Tens* is the smallest adapter that can express "steer by the look-ahead".
@@ -192,7 +202,7 @@ The reasoning uses three kinds of statement, labelled where it matters:
 
 - The many comparisons between candidates go to the model, where they are free and fair.
 - The current best plays real episodes. This shows whether imagined progress is real, and it gives new data from where the adapted agent goes, which retrains the cost predictor and counters the drift.
-- The final choice among a few finalists is made on fresh real episodes. Choosing on the model, or on episodes already used to steer the search, would be optimistic.
+- The final choice among a few finalists is made on all the real episodes each has played, pooled. Choosing on the model would be optimistic, and a few fresh episodes are too noisy: cost sits in a handful of episodes (decision 9). **Observation**, from exploratory runs: a re-check on 20 fresh episodes gave a cost of 2.5 to an adapter that cost 6.8 on the evaluation seeds. Pooling reuses episodes that steered the search, which is optimistic too, but less so. What protects the result is that it is reported only on evaluation seeds that took no part in any choice.
 
 **Open problem.** An archive costs more to check than one adapter: 10 adapters on 20 episodes each is already 200,000 steps. Possible answers are to check only the levels asked for, or to share the same real episodes between neighbouring cells. Not decided.
 
@@ -205,7 +215,13 @@ The reasoning uses three kinds of statement, labelled where it matters:
 - **Observation:** its imagined reward is too high for adapters that change the agent's behaviour. Steering keeps 61% of the reward in real episodes on PointGoal1 and 86% in the model.
 - So the model can bring a search to the safe adapters, and cannot choose among them or say that the limit is met. The real episodes of this decision are needed, not optional.
 
-**To settle before the search.** The imagined roll-outs started from states of the unadapted agent, 6.6% of which were already being charged a cost. **Assumption:** that is where the floor under the imagined cost comes from, and roll-outs that start from the adapted agent's own real episodes do not have it. If they still have it, the search needs more real episodes than planned.
+**Where the imagined roll-outs start.**
+
+- *From the adapted agent's own real episodes.* The roll-outs of the first measurement started from states of the unadapted agent, 6.6% of which were already being charged a cost. **Assumption:** the floor under the imagined cost and the too-high imagined reward both come from that. A roll-out of 40 decisions from the unadapted agent's states cannot see a stall that lasts hundreds of decisions; one that starts in the stall can. If roll-outs from the adapted agent's states still have the floor, the search needs more real episodes than planned.
+- *New ones each generation, the same for every candidate within one.* A fixed set lets the search fit those particular states. **Observation**, from exploratory runs: searches with one recipe ended 15 to 21 apart in reward. For the archive of decision 5 this means every adapter it keeps is scored again on each generation's states. Otherwise one that was lucky on the states of its own generation stays in its cell.
+- *Failures are kept.* Every state in which the current best really ran up a cost stays among the starting states for good, as a fixed share of each generation's. The failures then count through the average.
+
+**Set aside for now.** *Ranking on the worst starting states as a rule of its own*: it needs a share to call "worst" and a way to combine two rankings, which are the hand-set values decision 6 removes. It is tried only if keeping the failures is not enough.
 
 ## 8. Which tasks are used for what
 
@@ -216,6 +232,8 @@ The reasoning uses three kinds of statement, labelled where it matters:
 - **Fact:** five core tasks have reward-only and SafeDreamer checkpoints and are the SafeDreamer paper's main benchmark: PointGoal1, PointGoal2, PointButton1, PointPush1 and CarGoal1.
 - **Fact:** 13 further Safety-Gymnasium tasks have reward-only and BSRP-Lag checkpoints. They add a third robot (Racecar) and the harder level-2 layouts.
 - **Fact:** Meta-World through TD-MPC2 adds a second model family, four action numbers, a planner in place of an actor, and a cost we define ourselves.
+
+**The cost on Meta-World.** A region the gripper must not enter, placed between where the arm starts and its goal. It is worked out from the gripper's position, so the simulator is not changed, and it is the closest thing to a Safety-Gymnasium hazard: a place, on the way to the goal, that can be gone around.
 
 **Why two development tasks.** One task cannot tell a general recipe from one fitted to that task.
 
@@ -254,6 +272,19 @@ The reasoning uses three kinds of statement, labelled where it matters:
 
 **Why 250,000 steps.** **Fact:** by the SafeDreamer paper's curves, SafeDreamer first gets under the limit on PointGoal1 after about 0.5M to 1M steps (decision 7), so this is at most half of that. **Observation:** a cost predictor trained on 20 episodes scores almost as well as one trained on 140 (AUROC 0.996 against 0.998 on PointGoal1, 0.971 against 0.987 on PointButton1), so its episodes need not take most of the budget.
 
+**What is claimed.** The main comparison is the evolved adapter against steering's dial, by reward at the cost limit on the held-out tasks, each with its real steps counted. It is fixed before the search is run.
+
+- If the evolved adapter keeps more reward, evolution is the active ingredient, and that is the headline.
+- If it only matches, the paper claims the recipe: a frozen reward-only agent, a small cost predictor and the look-ahead are enough to make it safe within the budget. It reports that a search from zero finds the hand-written rule again, and that the rule does as well as the search.
+
+**What has to be counted.**
+
+- *The cost predictor's episodes.* **Observation:** every result so far used the predictor trained on 140 episodes with 20 more to set it, which is 160,000 of the 250,000 steps. The predictor trained on 20 episodes used 20 more to set it, 40,000 steps. Steering has to be shown with a predictor that fits the budget.
+- *The dial's own cost.* Choosing the setting of the dial takes real episodes, and they are counted against it.
+- *The cost paid on the way.* The cost of every real episode played to get the adapter, the unadapted agent's episodes for the predictor among them, is added up and reported. Scoring in the model keeps this low, since only the current best plays for real.
+
+**How many episodes the claim needs.** **Observation:** with steering on PointGoal1, three of 40 episodes hold 74% of the cost. A mean over 50 episodes then has a standard error of about 1.2, which cannot tell a cost of 1 from a cost of 3; over 300 episodes it is about 0.5. SafeDreamer's checkpoints have 0.4 to 0.7 over 50. The final evaluation is on a few hundred episodes, for SafeDreamer's checkpoints as well.
+
 ## 10. Where the search starts
 
 **Decision.** The search starts from zero weights, which is the unadapted agent. Steering is not its starting point. Steering and its dial, which scales its weights between 0 and 1, are baselines the search must beat.
@@ -272,20 +303,31 @@ The reasoning uses three kinds of statement, labelled where it matters:
 2. **Decisions 2, 3 and 4 as one designed comparison** on the development tasks. They interact: re-rank has few weights whatever it reads, the raw state implies thousands of weights, and the look-ahead implies tens. Varying one at a time would mislead.
 3. **Decision 5 after that.** An archive of adapters needs an adapter form that works at one safety level first.
 
-Before any search, two things are measured with steering, because a search can only improve what the adapter's inputs and the scoring can show:
+Before any search, these are measured with steering, because a search can only improve what the adapter's inputs and the scoring can show:
 
-- What the cost that steering leaves on PointButton1 is made of (fixed hazards, moving obstacles, wrong buttons), and where its reward is lost on PointGoal1.
-- Whether imagined roll-outs that start from the adapted agent's own states can tell low-cost adapters apart (decision 7).
+- What the cost that steering leaves on PointButton1 is made of (fixed hazards, moving obstacles, wrong buttons), and where its reward is lost on PointGoal1: in stalls or elsewhere (decision 3).
+- Whether steering still works with a cost predictor that fits the budget (decision 9).
+- Whether imagined roll-outs that start from the adapted agent's own states can tell low-cost adapters apart, and get the reward right (decision 7).
 
-## Baselines that test whether evolution matters
+The changes to the look-ahead (decision 2) and to the starting states (decision 7) go into the search one at a time, so that each can be measured.
 
-These are part of the design from the start, because they decide whether evolution is the active ingredient.
+The cost-predictor test on TD-MPC2 is run now and not left to the second part. It is cheap, and it decides whether the second part is possible at all.
+
+## Baselines
+
+**Whether evolution matters.** These are part of the design from the start, because they decide whether evolution is the active ingredient.
 
 - **Random search**: the same adapter, scoring and budget, with candidates drawn at random. This shows whether CMA-ES adds anything beyond sampling.
 - **Gradient training**: the same adapter trained by gradient descent through the world model. The adapter and the model are differentiable, so this is the obvious alternative.
 - **The free dial** of decision 5, for the safety-level claim.
-- **Steering and its dial**: the same inputs with hand-written weights and no search. This shows what the inputs give on their own (decision 10).
+- **Steering and its dial**: the same inputs with hand-written weights and no search. This shows what the inputs give on their own (decision 10). The real episodes that choose the dial's setting are counted against it.
 - **Re-rank with a swept price**: two weights and no search (decision 3).
+
+**Whether a frozen agent with an adapter is the cheaper way.** In the order they are built:
+
+- **SafeDreamer fine-tuned from the reward-only checkpoint** on the same 250,000 steps. If it gets under the limit within the budget, "cheaper than retraining" does not hold as stated, so it comes first.
+- **The actor retrained inside the frozen model** by gradient descent, with our cost predictor. The world model is frozen on both sides, so this is evolution against gradient training with everything else equal.
+- **A planner in the frozen model** that uses our cost predictor, which is what SafeDreamer's online variant does. It shows what more planning at every decision buys over the look-ahead's few futures.
 
 ## Assumptions to test
 
@@ -293,8 +335,12 @@ These are part of the design from the start, because they decide whether evoluti
 |---|---|---|
 | The frozen internal state holds enough to predict cost, in TD-MPC2 as well as DreamerV3 | 1 | The cost-predictor test repeated on TD-MPC2 |
 | The world model ranks candidates in roughly the same order as the real environment | 7 | Rank agreement between imagined and real scores for the same candidates |
-| Imagined roll-outs that start from the adapted agent's own states can tell low-cost adapters apart | 7 | The comparison of imagined and real scores again, with such starting states |
+| Imagined roll-outs that start from the adapted agent's own states can tell low-cost adapters apart, and get the reward right | 7 | The comparison of imagined and real scores again, with such starting states |
 | The cost steering leaves on PointButton1 is of a kind the adapter's inputs can show | 2, 9 | That cost split by its source, in real episodes |
+| Steering loses its reward, and has its rare costly episodes, in stalls in front of a hazard | 3 | Where in an episode the reward is lost, and how long the robot stands still near a hazard |
+| A cost predictor trained within the budget is enough for steering | 9 | Steering played with the predictor trained on 20 episodes |
+| Holding a pushed action shows more than letting the agent carry on after a push | 2 | Both look-aheads against the simulator, and inside the adapter |
+| An average over drawn roll-outs removes the look-ahead's excess cost on PointButton1 | 2 | Expected cost over real cost for both kinds of look-ahead |
 | An archive over cost levels keeps the search from collapsing to standing still | 5, 6 | The archive against a single-ranking search, same budget |
 | Scaling a safe adapter's output moves cost steadily between the unadapted and adapted levels | 5 | Cost measured at several scales of one adapter |
 | A small network can learn when to act, so no hand-built gate is needed | 4, 6 | The small network against the weighted sum with a gate |
