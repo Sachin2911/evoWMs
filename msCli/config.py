@@ -24,7 +24,7 @@ DEFAULT_PARTITION = "batch"
 # lands on the same node and fails too.
 EXCLUDED_NODES = {
     "batch": ["mscluster129"],
-    "bigbatch": ["mscluster44", "mscluster65", "mscluster71", "mscluster75", "mscluster82"],
+    "bigbatch": ["mscluster44", "mscluster65", "mscluster71", "mscluster75", "mscluster76", "mscluster82"],
 }
 DEFAULT_TIME = "01:00:00"
 
