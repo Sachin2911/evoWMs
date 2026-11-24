@@ -21,9 +21,9 @@ At each decision:
 4. The co-driver reads how each push, and stopping, changes cost and reward, together with a memory of what it did a moment ago.
 5. The co-driver scales the proposed action and adds a shift. That is the action the robot takes.
 
-The memory is what lets it commit. Without it the co-driver forgets each moment, the driver keeps pulling back towards the goal, and the robot stalls in front of the hazard.
+The memory is there to let it commit. Without it the co-driver forgets each moment, and the driver keeps pulling back towards the goal. In the searches run so far the co-driver has done as well without it (decision 6).
 
-The co-driver is a small table of numbers, and with all of them at zero it does nothing. Evolution tries many tables inside the world model, keeps the best of each kind in an archive, and lets only the current best play real episodes. Where that one stalls or fails becomes a test for the next round.
+The co-driver is a small table of numbers, and with all of them at zero it does nothing. Evolution tries many tables inside the world model and scores each by the reward it keeps, less a price on the cost it runs into. Only the current best plays real episodes. Those set the price, and where that one stalls or fails becomes a test for the next round.
 
 We supply the means: what the co-driver can see, that it can slow or shift, and that it can remember. Evolution finds how to use them.
 
@@ -87,12 +87,15 @@ That is 152 weights for two action numbers and 528 for four. At $\omega = 0$ the
 
 ![The search for the adapter's weights](theSearch.svg)
 
-1. **Candidates.** CMA-ES draws candidates around a centre, $\omega_i \sim \mathcal{N}(\mu, \sigma^2 C)$, starting from adapters the archive holds.
-2. **Imagined rolls.** Each candidate is rolled in the world model for $T$ decisions from the starting states $D_0$. Every candidate of a generation gets the same starting states and the same random numbers. A starting state comes with the memory that the adapter which played it had there, and the roll starts from that memory. The rolls give the candidate's imagined reward $\hat J_r(\omega_i)$ and cost $\hat J_c(\omega_i)$, both averaged over starting states and decisions.
-3. **The archive.** A candidate belongs to the cell $\beta(\omega_i) = (\beta_1, \beta_2)$. $\beta_1 = \hat J_c(\omega_i) / \hat J_c(0)$ is its cost level against the unadapted agent, in levels that each halve the one above. $\beta_2$ is its manner of acting, measured in the same rolls. The candidate is kept if it has more imagined reward than the adapter already in its cell. Every adapter the archive holds is rolled again on each generation's starting states, so the two are compared on the same rolls.
-4. **Real episodes.** Only the current best $\omega^\ast$ plays in the simulator. It is the adapter with the most imagined reward among those at or under the limit level $\ell$, the cost level that real episodes say matches the cost limit. Its episodes $\tau$ do four things:
+The figure draws step 3 as the archive of decision 10, which was built and lost to the single score below.
+
+1. **Candidates.** CMA-ES draws candidates around a centre, $\omega_i \sim \mathcal{N}(\mu, \sigma^2 C)$, starting from the adapter that does nothing.
+2. **Imagined rolls.** Each candidate is rolled in the world model for $T$ decisions from the starting states $D_0$. Every candidate of a generation gets the same starting states and the same random numbers. A starting state comes with the memory that the adapter which played it had there, and the roll starts from that memory. The rolls give the candidate's imagined reward $\hat J_r(\omega_i)$ and cost $\hat J_c(\omega_i)$, and how far it moves the action, $\hat\Delta(\omega_i) = \operatorname{mean} \lvert a - \bar a \rvert$, all averaged over starting states and decisions.
+3. **The score.** Reward and cost count as shares of the unadapted agent's on the same rolls: $\hat J_r(\omega_i) / \hat J_r(0) - p \cdot \hat J_c(\omega_i) / \hat J_c(0) - h \cdot \hat\Delta(\omega_i)$. The price $p$ and the hold $h$ start at 1 and are set by real episodes.
+4. **Real episodes.** Only the current best $\omega^\ast$ plays in the simulator. It is the centre of the search. Its episodes $\tau$ do five things:
    - They show whether the imagined progress is real.
-   - They move the limit level, down if they cost more than the limit and up if less: $\ell \leftarrow \ell \cdot \operatorname{clip}\big(d / J_c(\omega^\ast),\ 1/1.5,\ 1.5\big)$, from $\ell = d / J_c(0)$ at the start.
+   - They move the price, up if they cost more than the limit and down if less: $p \leftarrow p \cdot \operatorname{clip}\big(J_c(\omega^\ast) / d,\ 1/1.5,\ 1.5\big)$.
+   - They move the hold, up if they earned a smaller share of the unadapted agent's reward than the rolls imagined and down if a larger one, by the ratio of the two shares and by no more than a factor of 1.5.
    - The next starting states are drawn from them and from the kept states: $D_0 \leftarrow \operatorname{states}(\tau) \cup K$. The kept states $K$ are those at which a cost was charged, the few decisions before them, and the whole episode of each round that earned the least.
    - The cost predictor is fitted again on every episode played so far.
 5. **The final choice.** The adapters that played best are the finalists. They play more real episodes on the same seeds, and the choice is the one with the most reward within the cost limit: $\omega^\dagger = \arg\max_\omega J_r(\omega)$ subject to $J_c(\omega) \le d$.
@@ -124,13 +127,13 @@ Every real step is counted. Steps 1 to 3 use none.
 | $\mu$, $\sigma$, $C$ | CMA-ES centre, step size and table of how the weights vary together. This $\sigma$ is not $\sigma_x$ | |
 | $D_0$ | Starting states of the imagined rolls, from real episodes, each with the memory the adapter had there | 256 a generation |
 | $K$ | Kept states: costly ones, the decisions before them, and each round's lowest-earning episode | Grows with every round |
-| $\ell$ | Limit level: the imagined cost level that real episodes say matches the cost limit | Starts at $d / J_c(0)$ |
-| $T$ | Length of an imagined roll | 40 decisions |
-| $\hat J_r$, $\hat J_c$ | Imagined reward and cost of a candidate | One number each |
-| $\beta = (\beta_1, \beta_2)$ | Archive cell: cost level and manner of acting | |
+| $T$ | Length of an imagined roll | 40 decisions, 20 on Meta-World |
+| $\hat J_r$, $\hat J_c$, $\hat\Delta$ | Imagined reward and cost of a candidate, and how far it moves the action | One number each |
+| $p$ | Price of cost in the score, set by real episodes | Starts at 1 |
+| $h$ | Hold: the price of moving the action, set by real episodes | Starts at 1 |
 | $\tau$ | The real episodes played in a round | |
 | $J_r$, $J_c$ | Real reward and cost of an episode, averaged over episodes | |
-| $d$ | Cost limit | 2 in a 1,000-step episode |
+| $d$ | Cost limit | 2 in a Safety-Gymnasium episode, 0.5 in a Meta-World episode |
 | $\omega^\ast$, $\omega^\dagger$ | The current best, and the final choice | |
 
 ## The two agents
@@ -142,7 +145,7 @@ The recipe above the five pieces is the same for both agents. What stands behind
 | State $s_t$ | 512 continuous numbers and 48 choices among 48, from images | One vector of 512 numbers, from positions |
 | World model $f_\theta$ | Recurrent state-space model; the next state is a random draw | Latent dynamics network; no randomness |
 | Reward $r_\theta$ | Of the arriving state | Of a state and an action together |
-| Value $v_\theta$ | Critic, of a state | Its Q-network at the action its policy network would take |
+| Value $v_\theta$ | Critic, of a state | The mean of its Q-networks at the action its policy network would take, with their dropout off |
 | Proposal $\pi_\theta$ | Actor network | Planner in real play; policy network in imagined rolls |
 | Told the action taken | Yes, or its state drifts | No. The state is rebuilt from each observation, and the planner starts each plan from its last one |
 | Episode | 500 decisions, goals repeat | 100 decisions, one success |
@@ -150,7 +153,12 @@ The recipe above the five pieces is the same for both agents. What stands behind
 Two differences are in behaviour and not only in wiring.
 
 - TD-MPC2 proposes by planning, which is too slow for thousands of imagined decisions, so in imagined rolls its proposal comes from its policy network. The search then scores the policy network with the adapter, and the planner with the adapter is what plays.
-- TD-MPC2's world model is trained to roll 3 decisions ahead. The look-ahead asks it for 15 and an imagined roll for 40.
+- TD-MPC2's world model is trained to roll 3 decisions ahead. The look-ahead asks it for 15 and an imagined roll for 20.
+
+Two things in TD-MPC2's own code have to be switched off, or the same state does not give the same answer twice.
+
+- Its Q-networks keep their dropout on when the agent plays, because they are held as a copy that `model.eval()` never reaches. The value the adapter reads runs the agent's own weights through a Q-network with the dropout off.
+- Its arithmetic is written in TorchScript, which swaps in a faster version of a function after its first calls, with other last digits. Which decisions get which depends on everything computed before them, the adapter's look-ahead included, so an adapter at zero weights would not replay the unadapted agent. The swap is switched off.
 
 ## Decisions
 
@@ -292,6 +300,8 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **Rests on.** The assumption that a search from zero finds the latch. A latch needs a weight above 1 on a unit's own memory, and the first candidates lie about 0.3 from zero.
 
+**Found.** **Observation:** on PointGoal1 the search without the memory did at least as well as the search with it: reward 20.4 at a cost of 1.4 against 19.7 at 2.1 on fresh seeds, five searches each, and all five within the limit against three. On PointButton1 neither is within the limit. Whether any search found a latch has not been looked at.
+
 ### 7. The memory is one leaky unit per output
 
 **Decision.** Each adapter output has a unit that keeps a fading average of it. The fade rate is an evolved weight.
@@ -332,31 +342,30 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **To try.** On PointButton1 it misses 18% of costly decisions, and the hits of moving obstacles are what remains of the cost there (decision 2). Three changes aimed at that: fit it on rolled-forward states as well, since those are what it is asked about; compare it with one small hidden layer; and average the look-ahead over a few drawn rolls in place of the most likely one, as the design file lists.
 
-**Rests on.** The assumption that TD-MPC2's state also holds the cost. **Fact:** that state is trained to predict reward and value and not to rebuild the observation, so it may have dropped what does not affect reward.
+**Rests on.** The assumption that TD-MPC2's state also holds the cost. **Fact:** that state is trained to predict reward and value and not to rebuild the observation, so it may have dropped what does not affect reward. **Observation:** for a region the gripper must not enter it does: the predictor scores 0.969 to 1.000 on the four Meta-World tasks.
 
-### 10. The search: CMA-ES inside an archive
+### 10. The search: CMA-ES with one score and a price
 
-**Decision.** CMA-ES proposes candidates, and an archive keeps the best adapter for each cost level and each manner of acting.
+**Decision.** CMA-ES proposes candidates, and one score orders them: the reward share less a price on the cost share. The price is set by real episodes. An archive that keeps the best adapter for each cost level and each manner of acting was built to be the search, and lost to this one.
 
 **Why CMA-ES.**
 
 - **Fact:** it uses only the order of the candidates. **Observation:** the world model gets the order right and the levels wrong (rank agreement 0.82 to 0.88 by cost, with the imagined cost squeezed). A search that needs only the order is matched to that kind of model.
 
-**Why an archive with a manner axis.**
+**Why a price set by real episodes.**
 
-- **Observation:** braking is the nearest safe behaviour, and the pilot's single ranking collapsed into it. An archive keeps braking adapters in their own cells while the search finds redirecting ones.
-- Which cells hold the best adapters shows which response a task needs. That is a result in itself.
-- If the axis is how often the adapter acts, the archive shows the reward at each level of activity. No hand-set weight on "act less" is needed.
-- The axis has to be measurable on any robot. Two candidates: how much of the action's size is kept, $\lVert a_k \rVert / \lVert \bar a_k \rVert$, which measures slowing, and how far the action's direction is turned, which measures redirecting. Both come out of the imagined rolls.
+- No weight on cost is set by hand. What is set is the cost limit, which comes with the task. After each round the price moves by the ratio of the current best's real cost to the limit, by no more than a factor of 1.5.
+- **Observation:** over the checks of the first searches the imagined cost level was about right (a share of 0.20 imagined against 0.16 real), and the order near the limit was not (rank agreement 0.20). Only real episodes can say where the limit lies.
+- **Fact:** cost sits in a few episodes, so the mean of a handful is often far under the true one. An adapter is held to its mean cost plus the standard error, and the most the price changes shrinks each time the real cost crosses the limit.
+- **Observation:** a search's own episodes still flatter its choice. The adapters chosen on PointGoal1 cost 0.3 to 1.1 over the 30 episodes of their search and 1.4 to 2.7 on fresh seeds.
 
-**The rules of the archive.**
+**The archive, and how it lost.**
 
-- *Cost levels in equal ratios.* **Fact:** the cost limit is 4% of the unadapted agent's cost on PointGoal1 and 2% on PointButton1 (2 against 50.9 and 101.3). Equal steps between 0 and 1 would put every safe adapter in one cell, so each level is half the one above.
-- *The current best* is the adapter with the most imagined reward among those at or under the limit level $\ell$.
-- *The limit level is set by real episodes.* It starts at the cost limit as a share of the unadapted agent's real cost. After each round it moves by the ratio of the limit to the real cost of the current best, by no more than a factor of 1.5. This is the rule the price of cost followed in the single-score search. **Observation:** over the checks of the first searches the imagined cost level was about right (a share of 0.20 imagined against 0.16 real), and the order near the limit was not (rank agreement 0.20). The imagined axis cannot place the limit by itself.
-- *Every adapter the archive holds is rolled again on each generation's starting states*, as the design file requires (decision 7). One that was lucky on the states of its own generation, or was scored with an older cost predictor, would otherwise stay in its cell.
-
-**Rests on.** The assumption that the limit level settles. It moves on the real cost of a handful of episodes, and the model does not order adapters by cost near the limit.
+- It kept the adapter with the most imagined reward for each cost level, in levels that each halve the one above, and each share of the action's size kept. Every adapter it held was rolled again on each generation's starting states. The current best was the one with the most imagined reward at or under the limit level, the imagined cost level that real episodes say matches the cost limit, and the search started again from an adapter near that level after every round.
+- It was tried for three reasons. Braking is the nearest safe behaviour, and the pilot's single ranking collapsed into it; an archive keeps braking adapters in their own cells. Which cells hold the best adapters shows which response a task needs. And it needs no hand-set weight on acting less.
+- **Observation:** on fresh seeds its adapters earned 10.9 at a cost of 4.5 on PointGoal1, where the one score earned 19.7 to 20.8 at 1.4 to 2.7. On PointButton1 they cost 29.3, where the one score's cost 3.9 to 6.9.
+- **Observation:** it held 2 to 6 adapters at a time and started the search again 12 to 100 times in 150 generations. A candidate seldom lands in a new cell or beats the adapter in its own, so most generations tell CMA-ES little, and the real cost of its current best was still 7 to 47 on PointGoal1 at the last rounds.
+- **Observation:** the one score did not collapse into braking. In the rolls the adapters it chose keep 95% to 107% of the action's size on PointGoal1 and 87% to 101% on PointButton1.
 
 **Borrowed from evolutionary robotics.**
 
@@ -370,7 +379,7 @@ We found no method that removes the stall when the task policy is frozen. The se
 - More weights (152 and 528) than the "tens" of the design file, and more room for an adapter to look good only in imagination.
 - **Fact:** with 16 candidates a generation, CMA-ES takes about 2,900 generations to learn how 152 weights vary together, and about 35,000 for 528. The first searches ran 75. Over that many the search is close to one that treats every weight alike and adapts only its step size. Imagined generations use no real steps, so more of them between two rounds cost computing time only.
 - **Reported** (Ros and Hansen): a CMA-ES that keeps one number per weight, and none for pairs of weights, learns about $n/3$ times faster. It is the form to use for 528 weights.
-- A generation rolls every candidate and every adapter the archive holds, so the archive is kept small and a generation keeps the 256 starting states of the first searches. More are drawn only if one adapter's score changes more between two generations' states than candidates differ within one.
+- A generation keeps the 256 starting states of the first searches. More are drawn only if one adapter's score changes more between two generations' states than candidates differ within one.
 
 ### 11. The score has to see a stall
 
@@ -390,16 +399,25 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **Rests on.** The assumption that the world model is right about stalled states. The unadapted agent never stalls, so the model was never trained on one.
 
+**Found.** **Observation:** DreamerV3's world model is about right there. From the states of steering's own episodes where it really earned nothing over the next 40 decisions, the model imagines 0.1 to 0.3, against 1.7 to 1.9 for the unadapted agent from the same states. Over all starting states imagined and real reward agree in rank at 0.83 on PointGoal1 and 0.69 to 0.73 on PointButton1. Cost agrees far less: 0.05 on PointGoal1 and 0.28 to 0.39 on PointButton1.
+
 ### 12. One recipe, two agents
 
-**Decision.** Everything above the five pieces is the same for DreamerV3 and TD-MPC2. The differences are in the table under "The two agents".
+**Decision.** Everything above the five pieces is the same for DreamerV3 and TD-MPC2. The differences are in the table under "The two agents". On TD-MPC2 an imagined roll is 20 decisions, a fifth of an episode, and CMA-ES keeps one number per weight.
 
 **Why.**
 
 - **Fact:** TD-MPC2 has a policy network beside its planner, a deterministic latent dynamics network, a reward network on state and action, and Q-networks. Each of the five pieces can be written from these.
 - **Fact:** its planner is too slow to ask at every imagined decision, so imagined rolls use the policy network.
-- **Fact:** its world model is trained to roll 3 decisions ahead. The look-ahead's 15 and an imagined roll's 40 are far past that, and were chosen on DreamerV3.
+- **Fact:** its world model is trained to roll 3 decisions ahead. The look-ahead's 15 and an imagined roll's 20 are far past that.
 - **Fact:** its planner starts each plan from its last one, moved on by a decision, and is not told the action taken. With an adapter, the last plan was for an action the robot did not take.
+
+**Found.**
+
+- **Observation:** for the unadapted agent, rolls of 3 to 40 decisions agree with what really followed: on mw-reach 753 imagined against 755 real over 40 decisions, from the states that earned least. The policy network stands in well for the planner.
+- **Observation:** for an adapter that moves the action far, the rolls are too hopeful. Steering really keeps 28% of the reward on mw-reach and is imagined keeping 55% to 61% in rolls of 10 to 40 decisions, and at 40 decisions it is imagined running up the unadapted agent's whole cost where it really ran up none. After their first 10 generations the searches' current bests were imagined keeping 84% to 99% of the reward and really kept less than two thirds in 19 of 20 searches.
+- **Observation:** the searches recovered from that on three of four tasks without any change, through the starting states kept from the lowest-earning episodes (decision 11). On mw-reach and mw-button-press-topdown they then end where the searches of decision 13 do.
+- **Observation:** on fresh seeds the adapters chosen with the hold and the small first step of decision 13 keep 97% of the reward on mw-reach and on mw-button-press-topdown and 93% on mw-window-open, with the cost cut by 90% to 99% and every search within the limit. Steering at half strength keeps 25% to 82% there. On mw-push no adapter both pushes the puck and stays out of the region: the chosen ones keep 10% of the reward.
 
 **Rests on.**
 
@@ -407,13 +425,33 @@ We found no method that removes the stall when the task policy is frozen. The se
 - The assumption that its world model stays usable over 15 and 40 decisions.
 - The assumption that a plan started from one the adapter overrode is no worse.
 
+### 13. A second price, on moving the action
+
+**Decision.** The score also charges for how far a candidate moves the action, at a price the real episodes set: the hold (the search, steps 3 and 4). On TD-MPC2 the first candidates lie 0.05 from zero, where on DreamerV3 they lie 0.3.
+
+**Why.**
+
+- **Observation:** TD-MPC2's rolls are right about an adapter that moves the action little and too hopeful about one that moves it far (decision 12). A score of imagined reward and cost cannot tell the two apart.
+- **Fact:** how far the action is moved is measured in the rolls and needs nothing from the simulator. No weight on it is set by hand. The hold rises while the real episodes earn a smaller share of the unadapted agent's reward than the rolls imagined, and falls while they earn a larger one.
+- **Observation:** 0.3 from zero, the first candidates move each action number by 0.27 to 0.59 on a scale of $-1$ to $1$. 0.05 from zero they move it by 0.06 to 0.13. **Assumption:** TD-MPC2's model saw few actions far from its planner's choice in training.
+
+**Found.**
+
+- **Observation:** on mw-window-open, the task where the search of decision 12 did worst among those it could do, each of the two helps alone and both together do best. On fresh seeds: neither 1136 at a cost of 0.43, the small first step alone 1419 at 0.27, the hold alone 1400 at 0.29, both 1479 at 0.33 with the smallest spread between searches (19 against 51 to 82). The unadapted agent earns 1598 at 3.37.
+- **Observation:** on mw-reach and mw-button-press-topdown both together change nothing (1814 against 1816, and 1305 against 1298). On mw-push both together leave the failure a failure (171 against 65, of 1791).
+- **Observation:** where the hold ended follows how hard the task was to keep right: 1.3 to 1.6 on mw-reach, 1.4 to 2.1 on mw-button-press-topdown, 2.7 to 5.5 on mw-window-open, and 14 to 324 on mw-push, where the price of cost ran away as well.
+- **Observation:** on PointGoal1 both together do no harm and no good: 19.0 at a cost of 1.9 against 19.7 at 2.1 for the same adapter without them.
+
+**Rests on.** The assumption that moving the action less is what makes the rolls right. The two shares the hold compares are not measured alike: the imagined one comes from starting states of which half are costly or from the lowest-earning episode, the real one from whole episodes.
+
 ## What it changes in the code
 
 - `adapterRecipe/adapter.py`: the residual reads a memory and has fade weights; it takes the memory in and gives the next one back. Its output passes through tanh, and the added-on weights go.
 - `adapterRecipe/look_ahead.py`: the stopped action as one more held future, sums over three stretches of one roll with a size measured for each, and the symmetric log after the division by sizes.
 - `adapterRecipe/episodes.py` and `adapterRecipe/frozen_agent.py`: the memory is carried from one decision of an episode to the next and set to zero at each new episode. It is saved with the episode, one entry per decision.
 - `adapterRecipe/imagine.py`: the memory is carried through an imagined roll, and starts from the memory saved with each starting state. That is zero for a state of the unadapted agent.
-- `adapterRecipe/search.py`: an archive in place of the single score, with the manner of acting measured in the rolls; the limit level in place of the price; every adapter the archive holds rolled again each generation; each round's lowest-earning episode kept among the starting states as costly states are.
+- `adapterRecipe/search.py`: the score with its price, and with `--hold` the second price on moving the action; each round's lowest-earning episode kept among the starting states as costly states are. `--archive` runs the archive of decision 10 in place of the score.
+- `adapterRecipe/frozen_tdmpc2.py`: the five pieces for TD-MPC2 and its Meta-World simulator, with the two switches under "The two agents".
 - `adapterRecipe/cma.py`: a form that keeps one number per weight, for four action numbers.
 - The check that zero weights replay the unadapted agent exactly must still pass, with the memory staying at zero.
 
@@ -430,19 +468,20 @@ On TD-MPC2, imagined against real cost and reward by length of roll comes before
 
 ## Assumptions to test
 
-| Assumption | Decision | What would test it |
-|---|---|---|
-| Steering's stalls are in front of a hazard | 2 | Where the robot is when it is stuck, and how near the nearest hazard is |
-| A search from zero finds the latch | 3, 6 | A search on stalled starting states, with and without the memory |
-| Evolution commits better than gradient training | 3 | The same adapter trained by gradient descent through the world model |
-| No task needs a constant change to the action | 5 | A search with and without the added-on weights |
-| The stopped action gives the gain what it needs | 8 | A search with and without that future, on a task where slowing is the answer |
-| The world model is right about stalled states | 11 | Imagined against real reward for rolls that start in a real stall |
-| A manner-of-acting axis keeps the search from collapsing into braking | 10 | The archive against a single ranking, same budget |
-| 256 starting states are enough to order a generation's candidates | 10 | How much one adapter's score changes between two generations' states, against how much candidates differ within one |
-| The limit level settles | 10 | Its path over the rounds of a search, and the real cost of the current best at each |
-| Reading three stretches does no worse than the best single length | 8 | Steering and a search at one length and at three stretches |
-| TD-MPC2's state holds the cost | 9, 12 | The cost-predictor test on TD-MPC2 |
-| TD-MPC2's policy network and planner agree closely enough | 12 | How far their actions differ on the same states, and an adapter found with one played with the other |
-| TD-MPC2's world model stays usable over 15 and 40 decisions | 12 | Imagined against real cost and reward by length of roll |
-| A plan started from one the adapter overrode is no worse | 12 | The planner started afresh at every decision against started from its last plan, both with an adapter |
+| Assumption | Decision | What would test it | Found |
+|---|---|---|---|
+| Steering's stalls are in front of a hazard | 2 | Where the robot is when it is stuck, and how near the nearest hazard is | Not tested |
+| A search from zero finds the latch | 3, 6 | A search on stalled starting states, with and without the memory | The search without the memory did as well on PointGoal1 (decision 6). No adapter's weights were read for a latch |
+| Evolution commits better than gradient training | 3 | The same adapter trained by gradient descent through the world model | Not tested |
+| No task needs a constant change to the action | 5 | A search with and without the added-on weights | Not tested |
+| The stopped action gives the gain what it needs | 8 | A search with and without that future, on a task where slowing is the answer | Not tested |
+| The world model is right about stalled states | 11 | Imagined against real reward for rolls that start in a real stall | About right on DreamerV3 (decision 11) |
+| A manner-of-acting axis keeps the search from collapsing into braking | 10 | The archive against a single ranking, same budget | The single score did not collapse, and the archive lost to it (decision 10) |
+| 256 starting states are enough to order a generation's candidates | 10 | How much one adapter's score changes between two generations' states, against how much candidates differ within one | Not tested |
+| The limit level settles | 10 | Its path over the rounds of a search, and the real cost of the current best at each | No: the real cost of the archive's current best stayed far from the limit |
+| Reading three stretches does no worse than the best single length | 8 | Steering and a search at one length and at three stretches | Not tested |
+| TD-MPC2's state holds the cost | 9, 12 | The cost-predictor test on TD-MPC2 | Yes: 0.969 to 1.000 on four tasks |
+| TD-MPC2's policy network and planner agree closely enough | 12 | How far their actions differ on the same states, and an adapter found with one played with the other | Adapters found with the policy network work with the planner on three of four tasks (decision 12) |
+| TD-MPC2's world model stays usable over 15 and 40 decisions | 12 | Imagined against real cost and reward by length of roll | Near the unadapted agent, yes. For an adapter that moves the action far it is too hopeful (decision 12) |
+| Moving the action less is what makes TD-MPC2's rolls right | 13 | Imagined against real reward for adapters that move the action by different amounts | Not tested directly. The hold and the small first step each help on mw-window-open (decision 13) |
+| A plan started from one the adapter overrode is no worse | 12 | The planner started afresh at every decision against started from its last plan, both with an adapter | Not tested |
