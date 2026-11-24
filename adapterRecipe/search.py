@@ -64,6 +64,18 @@ cost crosses the limit, and --cautious holds an adapter to its mean cost plus th
 standard error. It shrinks the most the hold changes in the same way, each time the real
 reward share crosses the imagined one.
 
+Cost sits in a few episodes: most cost nothing and one in ten or twenty costs 20 to 700.
+Three options are for that, and belong together:
+
+    --window N      the price follows the cost over the episodes of the last N checks,
+                    not of the last check alone. Ten episodes seldom hold a costly one
+    --fading        the most the price changes at a check falls with the number of checks
+                    done: it can double at the first and change by a quarter at the last.
+                    --damped shrinks it at each crossing of the limit, and with costs like
+                    these the crossings are chance, so the price is stuck after four or five
+    --fresh         a finalist is judged on its further episodes alone. It became a
+                    finalist because its check's episodes went well, so they flatter it
+
 At the end the adapters that played best are finalists. Each plays more episodes, on the
 same seeds as the other finalists, and the one with the most reward among those within the
 cost limit over all its episodes is saved. If none is within the limit, the one with the
@@ -189,6 +201,16 @@ def judged(costs, cautious):
     return float(costs.mean() + error)
 
 
+def most_at(check, checks):
+    """With --fading, the most the price changes at a check: a factor of 2 at the first, falling to 1.26 at the last of 15."""
+    return 1 + 1 / (1 + 3 * check / checks)
+
+
+def over_window(checked, window):
+    """The cost of every episode of the last `window` checks, the latest check included."""
+    return [cost for record in checked[-window:] for cost in record['costs']]
+
+
 def best_of(played, count, limit):
     """The `count` best of adapters that have played: the most reward among those within the cost limit, then the least cost."""
     within = sorted((one for one in played if one['judged cost'] <= limit), key=lambda one: -one['reward'])
@@ -236,6 +258,11 @@ def main():
                         help='the most the price changes at a check shrinks each time the real cost crosses the limit')
     parser.add_argument('--hold', action='store_true',
                         help='one score: also charge for moving the action, more when the real reward falls short of the imagined')
+    parser.add_argument('--window', type=int, default=1,
+                        help='one score: the price follows the cost over the episodes of this many checks, the latest included')
+    parser.add_argument('--fading', action='store_true',
+                        help='one score: the most the price changes at a check falls with the checks done, not with crossings of the limit')
+    parser.add_argument('--fresh', action='store_true', help='judge a finalist on its further episodes alone')
     parser.add_argument('--first-seed', type=int, help='of the real episodes (default: 100000 + 1000 x seed)')
     args = parser.parse_args()
 
@@ -320,8 +347,10 @@ def main():
     seeds = iter(range(100000 + 1000 * args.seed if args.first_seed is None else args.first_seed, 10 ** 9))
     price, generation, checked, cost_paid = 1.0, 0, [], 0.0
     most, was_beyond = MOST_THE_PRICE_CHANGES, None
-    if args.hold and args.archive:
-        raise SystemExit('--hold is for the search with one score')
+    if args.archive and (args.hold or args.fading or args.window != 1):
+        raise SystemExit('--hold, --window and --fading are for the search with one score')
+    if args.window < 1:
+        raise SystemExit('--window counts checks, the latest included, so it is at least 1')
     hold, most_hold, was_short = (1.0 if args.hold else 0.0), MOST_THE_PRICE_CHANGES, None
     archive = Archive() if args.archive else None
     if archive is not None:
@@ -421,11 +450,15 @@ def main():
                   'rewards': rewards, 'costs': costs}
         checked.append(record)
 
-        beyond = record['judged cost'] > args.limit
-        if args.damped and was_beyond is not None and beyond != was_beyond:
+        # What the price follows: the cost over the episodes of the last few checks. Their adapters differ, but by little.
+        record['judged over the window'] = judged(over_window(checked, args.window), args.cautious)
+        beyond = record['judged over the window'] > args.limit
+        if args.fading:
+            most = most_at(check, args.checks)
+        elif args.damped and was_beyond is not None and beyond != was_beyond:
             most = float(np.sqrt(most))
         was_beyond = beyond
-        price *= float(np.clip(record['judged cost'] / args.limit, 1 / most, most))
+        price *= float(np.clip(record['judged over the window'] / args.limit, 1 / most, most))
         if args.hold and record['real reward share'] is not None:
             # The share of the unadapted agent's reward that was really earned, against the share the rolls imagined.
             real_share = record['real reward share']
@@ -464,19 +497,22 @@ def main():
             'check': check + 1, 'of': args.checks, 'reward': round(record['reward'], 2), 'cost': round(record['cost'], 2)}) + '\n')
         print(f'check {check}, generation {generation}: reward {record["reward"]:.2f}, cost {record["cost"]:.1f} '
               f'(imagined shares: reward {imagined["reward"]:.2f}, cost {imagined["cost"]:.2f}, kept {imagined["kept"]:.2f}); '
+              + (f'held to {record["judged over the window"]:.1f} over the last {min(args.window, check + 1)} checks; ' if args.window > 1 else '')
               + (f'limit level now {limit_level.level:.3f}, {len(archive)} in the archive, {restarts} restarts'
                  if archive is not None else f'price now {price:.2f}' + (f', hold now {hold:.2f}' if args.hold else ''))
               + f', {len(failures["memory"])} costly states kept', flush=True)
 
-    # The final choice: the best checked adapters play more, each on the same seeds, and all their episodes count.
-    finalists = best_of(checked, args.finalists, args.limit)
+    # The final choice: the best checked adapters play more, each on the same seeds. All their episodes count, or
+    # with --fresh the further ones alone. A finalist is picked on the cost its check was held to.
+    finalists = best_of([{**record, 'judged cost': record['judged over the window']} for record in checked], args.finalists, args.limit)
     further = [next(seeds) for _ in range(args.more)]
     pooled = []
     for finalist in finalists:
         _, weights, fixed = adapters.load(out / finalist['adapter'], action_numbers, None if remembers else state_numbers)
         seeds = iter(further)
         rewards, costs, _ = played(weights, args.more)
-        rewards, costs = finalist['rewards'] + rewards, finalist['costs'] + costs
+        if not args.fresh:
+            rewards, costs = finalist['rewards'] + rewards, finalist['costs'] + costs
         pooled.append({'check': finalist['check'], 'adapter': finalist['adapter'], 'episodes': len(costs),
                        'reward': float(np.mean(rewards)), 'cost': float(np.mean(costs)), 'judged cost': judged(costs, args.cautious),
                        'reward at its check': finalist['reward'], 'cost at its check': finalist['cost']})

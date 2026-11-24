@@ -390,6 +390,10 @@ class Search(unittest.TestCase):
         final, checks, adapter, files = self.run_search()
         self.assertEqual(adapter.count, 152)
         self.assertNotIn('archive.jsonl', files)
+        # Without a window an adapter is held to the episodes of its own check, and a finalist to all its episodes.
+        for check in checks:
+            self.assertEqual(check['judged over the window'], check['judged cost'])
+        self.assertEqual({finalist['episodes'] for finalist in final['finalists']}, {4})
 
     def test_one_score_cautious_and_damped_without_memory(self):
         final, checks, adapter, files = self.run_search('--cautious', '--damped', '--no-memory')
@@ -408,6 +412,28 @@ class Search(unittest.TestCase):
             self.assertEqual(after > before, check['real reward share'] < check['imagined reward share'])
         with self.assertRaises(SystemExit):
             self.run_search('--hold', '--archive')
+
+    def test_one_score_with_a_window(self):
+        import search
+        # The most the price changes: a factor of 2 at the first check and less at each later one, whatever the costs were.
+        self.assertEqual(search.most_at(0, 15), 2.0)
+        self.assertAlmostEqual(search.most_at(5, 15), 1.5)
+        self.assertTrue(all(search.most_at(check + 1, 15) < search.most_at(check, 15) for check in range(14)))
+        # The window is the episodes of the last checks, the latest included, and fewer while fewer have been played.
+        checked = [{'costs': [1.0, 0.0]}, {'costs': [0.0, 4.0]}, {'costs': [2.0, 2.0]}]
+        self.assertEqual(search.over_window(checked, 2), [0.0, 4.0, 2.0, 2.0])
+        self.assertEqual(search.over_window(checked[:1], 3), [1.0, 0.0])
+        final, checks, adapter, files = self.run_search('--cautious', '--window', '2', '--fading', '--fresh')
+        prices = [check['price'] for check in checks] + [final['price at the end']]
+        for number, (check, before, after) in enumerate(zip(checks, prices, prices[1:])):
+            costs = [cost for earlier in checks[max(0, number - 1):number + 1] for cost in earlier['costs']]
+            self.assertAlmostEqual(check['judged over the window'], search.judged(costs, True))
+            most = search.most_at(number, 3)
+            self.assertAlmostEqual(after / before, float(np.clip(check['judged over the window'] / 2, 1 / most, most)))
+        # A finalist is judged on its further episodes alone.
+        self.assertEqual({finalist['episodes'] for finalist in final['finalists']}, {2})
+        with self.assertRaises(SystemExit):
+            self.run_search('--window', '2', '--archive')
 
     def test_archive(self):
         final, checks, adapter, files = self.run_search('--archive', '--diagonal')
