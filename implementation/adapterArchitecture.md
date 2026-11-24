@@ -300,7 +300,7 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **Rests on.** The assumption that a search from zero finds the latch. A latch needs a weight above 1 on a unit's own memory, and the first candidates lie about 0.3 from zero.
 
-**Found.** **Observation:** on PointGoal1 the search without the memory did at least as well as the search with it: reward 20.4 at a cost of 1.4 against 19.7 at 2.1 on fresh seeds, five searches each, and all five within the limit against three. On PointButton1 neither is within the limit. Whether any search found a latch has not been looked at.
+**Found.** **Observation:** on PointGoal1 the search without the memory did at least as well as the search with it: reward 20.4 at a cost of 1.4 against 19.7 at 2.1 on fresh seeds, five searches each, and all five within the limit against three. On PointButton1 neither is within the limit. On the 16 further tasks, with the price of decision 14 and three searches each, the two cannot be told apart. With the memory the mean cost is within the limit on 7 tasks and in 21 of 48 searches, at a mean cost of 4.1 and 21% of the unadapted reward kept. Without it: 7 tasks, 25 of 48 searches, 4.3 and 21%. The memory earns more on 8 of the 16 tasks and costs less on 8, and the largest difference on any task is about twice its standard error. Whether any search found a latch has not been looked at.
 
 ### 7. The memory is one leaky unit per output
 
@@ -500,7 +500,7 @@ On TD-MPC2, imagined against real cost and reward by length of roll comes before
 | Assumption | Decision | What would test it | Found |
 |---|---|---|---|
 | Steering's stalls are in front of a hazard | 2 | Where the robot is when it is stuck, and how near the nearest hazard is | Not tested |
-| A search from zero finds the latch | 3, 6 | A search on stalled starting states, with and without the memory | The search without the memory did as well on PointGoal1 (decision 6). No adapter's weights were read for a latch |
+| A search from zero finds the latch | 3, 6 | A search on stalled starting states, with and without the memory | The search without the memory did as well on PointGoal1 and on the 16 further tasks (decision 6). No adapter's weights were read for a latch |
 | Evolution commits better than gradient training | 3 | The same adapter trained by gradient descent through the world model | Not tested |
 | No task needs a constant change to the action | 5 | A search with and without the added-on weights | Not tested |
 | The stopped action gives the gain what it needs | 8 | A search with and without that future, on a task where slowing is the answer | Not tested |
