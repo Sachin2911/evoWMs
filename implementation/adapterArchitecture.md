@@ -94,11 +94,11 @@ The figure draws step 3 as the archive of decision 10, which was built and lost 
 3. **The score.** Reward and cost count as shares of the unadapted agent's on the same rolls: $\hat J_r(\omega_i) / \hat J_r(0) - p \cdot \hat J_c(\omega_i) / \hat J_c(0) - h \cdot \hat\Delta(\omega_i)$. The price $p$ and the hold $h$ start at 1 and are set by real episodes.
 4. **Real episodes.** Only the current best $\omega^\ast$ plays in the simulator. It is the centre of the search. Its episodes $\tau$ do five things:
    - They show whether the imagined progress is real.
-   - They move the price, up if they cost more than the limit and down if less: $p \leftarrow p \cdot \operatorname{clip}\big(J_c(\omega^\ast) / d,\ 1/1.5,\ 1.5\big)$.
+   - They move the price, up if they cost more than the limit and down if less: $p \leftarrow p \cdot \operatorname{clip}\big(J_c(\omega^\ast) / d,\ 1/1.5,\ 1.5\big)$. With decision 14, $J_c$ is taken over the episodes of the last three rounds, and the bound of 1.5 becomes one that falls from 2 at the first round to 1.26 at the last.
    - They move the hold, up if they earned a smaller share of the unadapted agent's reward than the rolls imagined and down if a larger one, by the ratio of the two shares and by no more than a factor of 1.5.
    - The next starting states are drawn from them and from the kept states: $D_0 \leftarrow \operatorname{states}(\tau) \cup K$. The kept states $K$ are those at which a cost was charged, the few decisions before them, and the whole episode of each round that earned the least.
    - The cost predictor is fitted again on every episode played so far.
-5. **The final choice.** The adapters that played best are the finalists. They play more real episodes on the same seeds, and the choice is the one with the most reward within the cost limit: $\omega^\dagger = \arg\max_\omega J_r(\omega)$ subject to $J_c(\omega) \le d$.
+5. **The final choice.** The adapters that played best are the finalists. They play more real episodes on the same seeds, and the choice is the one with the most reward within the cost limit: $\omega^\dagger = \arg\max_\omega J_r(\omega)$ subject to $J_c(\omega) \le d$. With decision 14 a finalist is judged on these further episodes alone.
 
 Every real step is counted. Steps 1 to 3 use none.
 
@@ -367,6 +367,13 @@ We found no method that removes the stall when the task policy is frozen. The se
 - **Observation:** it held 2 to 6 adapters at a time and started the search again 12 to 100 times in 150 generations. A candidate seldom lands in a new cell or beats the adapter in its own, so most generations tell CMA-ES little, and the real cost of its current best was still 7 to 47 on PointGoal1 at the last rounds.
 - **Observation:** the one score did not collapse into braking. In the rolls the adapters it chose keep 95% to 107% of the action's size on PointGoal1 and 87% to 101% on PointButton1.
 
+**Found on tasks it was not developed on.** The recipe was fixed on PointGoal1 and PointButton1 and then run on the 16 other Safety-Gymnasium tasks, three searches each.
+
+- **Observation:** on fresh seeds the chosen adapters cut 95% of the unadapted agent's cost and keep 26% of its reward, as means over the tasks. Their mean cost is within the limit on 3 of the 16 tasks, and 10 of the 48 searches are within it.
+- **Observation:** against steering at twice its strength they earn more at less cost on 2 tasks, less at more cost on 3, and trade one for the other on 11. Against SafeDreamer's BSRP-Lag, which was trained for the limit, they earn less at more cost on 13.
+- **Observation:** starting the search from steering changes nothing: within the limit on 2 of 16 tasks, 28% of the reward kept.
+- **Observation:** the searches themselves ran above the limit. Over their last seven checks the current bests really cost 5.9 on average, and the chosen adapters cost 2.4 over their own 30 episodes and 5.3 over 300 fresh ones. Decision 14 is about why.
+
 **Borrowed from evolutionary robotics.**
 
 - **Reported** (Floreano and Mondada 1994): evolved obstacle avoidance met the same problem, that standing still is safe. Their fitness multiplied speed, straightness and distance from obstacles, so a robot that stops scores zero. This suits the single-ranking baseline, with no price to set.
@@ -444,13 +451,35 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **Rests on.** The assumption that moving the action less is what makes the rolls right. The two shares the hold compares are not measured alike: the imagined one comes from starting states of which half are costly or from the lowest-earning episode, the real one from whole episodes.
 
+### 14. The price follows several rounds, and loosens on a schedule
+
+**Decision.** Three changes to how real episodes are read, made after decision 10's result on the 16 further tasks. The price follows the cost over the episodes of the last three rounds. The most it changes at a round falls with the number of rounds done, from a factor of 2 to 1.26, and no longer with crossings of the limit. A finalist is judged on 40 further episodes alone.
+
+**Why.**
+
+- **Observation:** cost sits in rare episodes. On fresh seeds, 4% to 67% of a chosen adapter's episodes cost anything, the median episode costs nothing for 35 of 40 adapters, and the costliest episode costs 38 to 730. Ten episodes seldom hold one.
+- **Observation:** the price was stuck. Its bound was halved, on a log scale, each time the judged cost crossed the limit. With costs like these the crossings are chance, four or five a search, so from about the eighth round the price moved by 1% to 2%. Over the last seven rounds three in four were judged over the limit and the price could not follow.
+- **Fact:** a bound that falls with the rounds done cannot be used up by chance crossings, and still lets the price settle.
+- **Fact:** an adapter becomes a finalist because its own round went well. Counting those episodes again in the final choice flatters it.
+
+**Rests on.** The assumption that the adapters of three rounds in a row are alike enough for their episodes to be read together.
+
+**Found.** These runs came after the further tasks' scoreboards had been seen, so those tasks are not untouched for this decision.
+
+- **Observation:** on the two development tasks, five searches each on fresh seeds. PointGoal1: 17.8 at a cost of 1.6 with 4 of 5 searches within the limit, against 19.7 at 2.1 with 3 of 5 for decision 10's search. PointButton1: 3.1 at 6.1 against 2.4 at 3.9, with no search within the limit either way.
+- **Observation:** on the 16 further tasks, three searches each on fresh seeds, the mean cost is within the limit on 7 tasks where it was on 3, and 21 of the 48 searches are within it where 10 were. The mean cost over the tasks falls from 5.3 to 4.1, and the share of the unadapted reward kept from 26% to 21%.
+- **Observation:** all of the gain is on the 11 Goal and Push tasks: mean cost 3.3 to 1.8, within the limit on 7 tasks where it was on 3, reward kept 37% to 30%. On the 5 Button tasks nothing changes: a cost of 9.2 against 9.9, about 1% of the reward kept, and the price at its ceiling at the end of 14 of the 15 searches. As on PointButton1, no adapter found both presses the buttons and stays within the limit.
+- **Observation:** the baselines still stand. Against steering at twice its strength the chosen adapters earn more at less cost on 1 task, less at more cost on 3, and less at less cost on 10. Steering at twice its strength is within the limit on 6 tasks and keeps 31% of the reward. BSRP-Lag is within the limit on 13 and keeps 62%, and the chosen adapters earn less at more cost than it on 12.
+- **Observation:** a finalist's own episodes still read low. The chosen adapters cost 2.6 over their own 40 further episodes and 4.1 over 300 fresh ones, where decision 10's cost 2.4 and 5.3. Of the 28 searches that called their choice within the limit, 18 were.
+- **Fact:** a search plays 310,000 simulator steps where decision 10's plays 250,000.
+
 ## What it changes in the code
 
 - `adapterRecipe/adapter.py`: the residual reads a memory and has fade weights; it takes the memory in and gives the next one back. Its output passes through tanh, and the added-on weights go.
 - `adapterRecipe/look_ahead.py`: the stopped action as one more held future, sums over three stretches of one roll with a size measured for each, and the symmetric log after the division by sizes.
 - `adapterRecipe/episodes.py` and `adapterRecipe/frozen_agent.py`: the memory is carried from one decision of an episode to the next and set to zero at each new episode. It is saved with the episode, one entry per decision.
 - `adapterRecipe/imagine.py`: the memory is carried through an imagined roll, and starts from the memory saved with each starting state. That is zero for a state of the unadapted agent.
-- `adapterRecipe/search.py`: the score with its price, and with `--hold` the second price on moving the action; each round's lowest-earning episode kept among the starting states as costly states are. `--archive` runs the archive of decision 10 in place of the score.
+- `adapterRecipe/search.py`: the score with its price, and with `--hold` the second price on moving the action; each round's lowest-earning episode kept among the starting states as costly states are. `--archive` runs the archive of decision 10 in place of the score. `--window`, `--fading` and `--fresh` are decision 14.
 - `adapterRecipe/frozen_tdmpc2.py`: the five pieces for TD-MPC2 and its Meta-World simulator, with the two switches under "The two agents".
 - `adapterRecipe/cma.py`: a form that keeps one number per weight, for four action numbers.
 - The check that zero weights replay the unadapted agent exactly must still pass, with the memory staying at zero.
@@ -485,3 +514,5 @@ On TD-MPC2, imagined against real cost and reward by length of roll comes before
 | TD-MPC2's world model stays usable over 15 and 40 decisions | 12 | Imagined against real cost and reward by length of roll | Near the unadapted agent, yes. For an adapter that moves the action far it is too hopeful (decision 12) |
 | Moving the action less is what makes TD-MPC2's rolls right | 13 | Imagined against real reward for adapters that move the action by different amounts | Not tested directly. The hold and the small first step each help on mw-window-open (decision 13) |
 | A plan started from one the adapter overrode is no worse | 12 | The planner started afresh at every decision against started from its last plan, both with an adapter | Not tested |
+| The adapters of three rounds in a row are alike enough to read together | 14 | The cost of a round's episodes against the cost of the two rounds before it, for the same search | Not tested. The price read this way brings more searches within the limit (decision 14) |
+| An adapter on the action can keep a Button task within the limit | 10, 14 | A longer search, or an adapter that reads more than the look-ahead | No adapter found does, on 6 Button tasks, with either way of setting the price |
