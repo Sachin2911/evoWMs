@@ -437,7 +437,7 @@ We found no method that removes the stall when the task policy is frozen. The se
 
 **Found.**
 
-- **Observation:** on mw-window-open, the task where the search of decision 12 did worst among those it could do, each of the two helps alone and both together do best. On fresh seeds: neither 1136 at a cost of 0.43, the small first step alone 1419 at 0.27, the hold alone 1400 at 0.29, both 1479 at 0.33 with the smallest spread between searches (19 against 51 to 82). The unadapted agent earns 1598 at 3.37.
+- **Observation:** on mw-window-open, the task where the search of decision 12 did worst among those it could do, each of the two helps alone and both together do best. On fresh seeds: neither 1136 at a cost of 0.43, the small first step alone 1419 at 0.27, the hold alone 1400 at 0.29, both 1479 at 0.33, with the searches differing least from one another (a standard deviation of 43 against 88 to 142). The unadapted agent earns 1598 at 3.37.
 - **Observation:** on mw-reach and mw-button-press-topdown both together change nothing (1814 against 1816, and 1305 against 1298). On mw-push both together leave the failure a failure (171 against 65, of 1791).
 - **Observation:** where the hold ended follows how hard the task was to keep right: 1.3 to 1.6 on mw-reach, 1.4 to 2.1 on mw-button-press-topdown, 2.7 to 5.5 on mw-window-open, and 14 to 324 on mw-push, where the price of cost ran away as well.
 - **Observation:** on PointGoal1 both together do no harm and no good: 19.0 at a cost of 1.9 against 19.7 at 2.1 for the same adapter without them.
