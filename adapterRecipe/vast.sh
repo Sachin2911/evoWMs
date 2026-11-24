@@ -13,6 +13,7 @@
 #
 #   bash vast.sh setup COMMIT            install everything, and check that the simulator renders on every GPU
 #   bash vast.sh checkpoints TASK ...    download the reward-only and the BSRP-Lag checkpoints of each task
+#                                        (VARIANTS=dreamerv3 leaves the BSRP-Lag ones out)
 #   bash vast.sh workers N               start N workers per GPU; each takes one run at a time from the queue
 #   bash vast.sh sweep NAME "GRID" COMMAND ...
 #                                        queue one run per combination of the grid, with its settings added to
@@ -79,7 +80,7 @@ setup)
 checkpoints)
     shift
     for task in "$@"; do
-        grep -E "_(dreamerv3|bsrp_lag)_([0-9.]+_)?safetygym_Safety${task}-v0_" "$REPO/safeDreamerBaselines/checkpoints.sha256" \
+        grep -E "_(${VARIANTS:-dreamerv3|bsrp_lag})_([0-9.]+_)?safetygym_Safety${task}-v0_" "$REPO/safeDreamerBaselines/checkpoints.sha256" \
             | while read -r checksum path; do
             target="$ADAPTER_DATA/safedreamer_checkpoints/$path"
             if [ -f "$target" ] && echo "$checksum  $target" | sha256sum --check --status; then echo "have  $path"; continue; fi
