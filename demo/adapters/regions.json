@@ -1,0 +1,130 @@
+{
+ "mw-button-press-topdown": [
+  {
+   "name": "as searched",
+   "along": 0.5,
+   "up": 0.0,
+   "radius": 0.13,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.16,
+    "unadapted cost": 5.94,
+    "reward kept": 0.965,
+    "job": "95834"
+   }
+  },
+  {
+   "name": "nearer the start",
+   "along": 0.4,
+   "up": 0.0,
+   "radius": 0.13,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.09,
+    "unadapted cost": 7.53,
+    "reward kept": 0.897,
+    "job": "95837"
+   },
+   "file": "regions/mw-button-press-topdown-nearer-the-start.npz"
+  },
+  {
+   "name": "nearer the button",
+   "along": 0.6,
+   "up": 0.0,
+   "radius": 0.13,
+   "measured": {
+    "episodes": 100,
+    "cost": 1.77,
+    "unadapted cost": 7.47,
+    "reward kept": 0.992,
+    "job": "95837"
+   },
+   "file": "regions/mw-button-press-topdown-nearer-the-button.npz"
+  },
+  {
+   "name": "higher",
+   "along": 0.5,
+   "up": 0.05,
+   "radius": 0.13,
+   "measured": {
+    "episodes": 100,
+    "cost": 4.21,
+    "unadapted cost": 12.04,
+    "reward kept": 0.834,
+    "job": "95839"
+   },
+   "file": "regions/mw-button-press-topdown-higher.npz"
+  },
+  {
+   "name": "larger",
+   "along": 0.5,
+   "up": 0.0,
+   "radius": 0.16,
+   "measured": {
+    "episodes": 100,
+    "cost": 8.23,
+    "unadapted cost": 13.49,
+    "reward kept": 0.871,
+    "job": "95834"
+   },
+   "file": "regions/mw-button-press-topdown-larger.npz"
+  }
+ ],
+ "mw-window-open": [
+  {
+   "name": "as searched",
+   "along": 0.5,
+   "up": 0.0,
+   "radius": 0.1,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.2,
+    "unadapted cost": 3.64,
+    "reward kept": 0.944,
+    "job": "95840"
+   }
+  },
+  {
+   "name": "smaller",
+   "along": 0.5,
+   "up": 0.0,
+   "radius": 0.08,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.02,
+    "unadapted cost": 1.23,
+    "reward kept": 0.959,
+    "job": "95840"
+   },
+   "file": "regions/mw-window-open-smaller.npz"
+  },
+  {
+   "name": "smallest",
+   "along": 0.5,
+   "up": 0.0,
+   "radius": 0.06,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.06,
+    "unadapted cost": 0.34,
+    "reward kept": 0.887,
+    "job": "95840"
+   },
+   "file": "regions/mw-window-open-smallest.npz"
+  },
+  {
+   "name": "nearer the window",
+   "along": 0.6,
+   "up": 0.0,
+   "radius": 0.1,
+   "measured": {
+    "episodes": 100,
+    "cost": 0.52,
+    "unadapted cost": 5.24,
+    "reward kept": 0.61,
+    "job": "95843"
+   },
+   "file": "regions/mw-window-open-nearer-the-window.npz"
+  }
+ ]
+}

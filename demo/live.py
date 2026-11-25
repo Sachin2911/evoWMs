@@ -12,6 +12,9 @@ scoreboard.py. It runs on the machine in front of the viewer, inside the TD-MPC2
 What the viewer can do:
 
     choose the task        pressing a button from above, or sliding a window open
+    change the region      to another size or place, from those listed in regions.json.
+                           The adapter's weights stay as they are; the cost predictor
+                           it reads is the one fitted for that region
     turn the strength      what the adapter's gains and shifts are multiplied by before
                            they are applied to the action. 0 is the unadapted agent, and
                            1 is the adapter as the search left it
@@ -68,25 +71,40 @@ class Arm:
         self.loaded = {}
 
     def choose(self, task):
-        """Makes `task` the one this arm plays, loading its agent, simulator and adapter the first time."""
+        """Makes `task` the one this arm plays, loading its agent and simulator the first time, with the region it was searched with."""
         if task not in self.loaded:
-            import adapter as adapters
             import frozen_tdmpc2
 
             player = frozen_tdmpc2.Player(self.checkpoints / f'{task}-1.pt')
-            file = self.adapter_folder / f'{task}.npz'
-            state_numbers = int(np.load(file)['predictor_weights'].shape[0])
-            adapter, weights, fixed = adapters.load(file, player.action_numbers, state_numbers)
             sim = player._env.unwrapped.sim
             # The first picture makes the renderer, which the markers are then added to.
             sim.render(self.size, self.size, camera_name=CAMERA, mode='offscreen')
             # The image draws on the processor, where the table's reflections take longer than all the rest of a picture.
             from mujoco_py.generated import const
             sim._render_context_offscreen.scn.flags[const.RND_REFLECTION] = 0
-            self.loaded[task] = {'player': player, 'adapter': adapter, 'weights': np.asarray(weights, np.float32), 'fixed': fixed,
-                                 'sim': sim, 'at strength': {}}
+            self.loaded[task] = {'player': player, 'sim': sim, 'regions': regions_of(self.adapter_folder, task, player.radius),
+                                 'adapters': {}}
         self.task = task
         self.now = self.loaded[task]
+        self.place(self.now['regions'][0]['name'])
+
+    def place(self, name):
+        """Makes the region called `name` the one this arm plays with, loading its adapter the first time.
+
+        Every region has an adapter file of its own: the same weights, with the cost
+        predictor of that region and the sizes measured with it (adapterRecipe/check_region.py).
+        """
+        import adapter as adapters
+
+        region = next(region for region in self.now['regions'] if region['name'] == name)
+        if name not in self.now['adapters']:
+            file = self.adapter_folder / region['file']
+            state_numbers = int(np.load(file)['predictor_weights'].shape[0])
+            adapter, weights, fixed = adapters.load(file, self.now['player'].action_numbers, state_numbers)
+            self.now['adapters'][name] = {'adapter': adapter, 'weights': np.asarray(weights, np.float32), 'fixed': fixed,
+                                          'at strength': {}}
+        self.region = region
+        self.now.update(self.now['adapters'][name])
 
     def reset(self, seed):
         """Begins the episode of `seed`, as Player.play begins one."""
@@ -103,8 +121,11 @@ class Arm:
         self.gripper = GRIPPER
         observation = self.obs.numpy()
         start, target = observation[GRIPPER], observation[GOAL if player.toward == 'goal' else OBJECT]
-        # The region the gripper must not enter: halfway between where it starts and the first thing it has to reach.
-        self.centre = (start + target) / 2
+        # The region the gripper must not enter. The adapters were searched with it halfway between where the gripper
+        # starts and the first thing it has to reach; that one is worked out as frozen_tdmpc2.py works it out.
+        along, up = self.region['along'], self.region['up']
+        self.centre = (start + target) / 2 if (along, up) == (0.5, 0.0) else (
+            start + along * (target - start) + np.array([0.0, 0.0, up])).astype(np.float32)
         self.decision, self.done, self.reward, self.success, self.output = 0, False, 0.0, False, None
         self.path, self.charged, self.chance = [], [], []
         self._arrived(observation)
@@ -117,7 +138,7 @@ class Arm:
         player, torch = self.now['player'], self.now['player']._torch
         gripper = observation[self.gripper]
         self.path.append(gripper.copy())
-        self.charged.append(bool(np.linalg.norm(gripper - self.centre) < player.radius))
+        self.charged.append(bool(np.linalg.norm(gripper - self.centre) < self.region['radius']))
         with torch.no_grad():
             self.latent = player.agent.model.encode(self.obs.to(player.agent.device).unsqueeze(0), None).cpu().numpy()
         predictor = self.now['fixed']['predictor']
@@ -166,7 +187,7 @@ class Arm:
         from mujoco_py.generated import const
         from PIL import Image
 
-        sim, radius = self.now['sim'], self.now['player'].radius
+        sim, radius = self.now['sim'], self.region['radius']
         renderer = sim._render_context_offscreen
         inside = self.charged[-1]
         renderer.add_marker(pos=self.centre.astype(np.float64), size=np.full(3, radius), type=const.GEOM_SPHERE, label='',
@@ -190,6 +211,25 @@ class Arm:
                 'picture': self.picture()}
 
 
+def regions_of(adapter_folder, task, radius):
+    """The regions `task` can be shown with. The first is the one its adapter was searched with.
+
+    The others are listed in regions.json in the adapter folder, if there is one: for each
+    task, a list of regions with a `name`, the adapter `file` of that region, `along`,
+    `up` and `radius` as check_region.py takes them, and what check_region.py `measured`
+    there. An entry called 'as searched' only adds what was measured to the first region.
+    """
+    regions = [{'name': 'as searched', 'file': f'{task}.npz', 'along': 0.5, 'up': 0.0, 'radius': radius}]
+    listed = pathlib.Path(adapter_folder) / 'regions.json'
+    if listed.exists():
+        for region in json.loads(listed.read_text()).get(task, []):
+            if region['name'] == 'as searched':
+                regions[0]['measured'] = region.get('measured')
+            else:
+                regions.append(region)
+    return regions
+
+
 def arm(pipe, checkpoints, adapter_folder, adapted, size):
     """An arm in a process of its own. It answers every order it is sent with what described() gives, or with the error."""
     one = Arm(checkpoints, adapter_folder, adapted, size)
@@ -198,7 +238,10 @@ def arm(pipe, checkpoints, adapter_folder, adapted, size):
         try:
             if order[0] == 'task':
                 one.choose(order[1])
-                pipe.send({'radius': one.now['player'].radius, 'limit': one.now['player'].cost_limit})
+                pipe.send({'regions': one.now['regions'], 'limit': one.now['player'].cost_limit})
+            elif order[0] == 'region':
+                one.place(order[1])
+                pipe.send({})
             elif order[0] == 'reset':
                 pipe.send(one.reset(order[1]))
             elif order[0] == 'step':
@@ -220,7 +263,7 @@ class Show:
             context.Process(target=arm, args=(theirs, args.checkpoints, args.adapters, adapted, args.size), daemon=True).start()
             self.pipes.append(ours)
         self.changed = threading.Condition()
-        self.wanted = {'task': args.task, 'strength': 1.0, 'paused': False, 'auto': True, 'rate': args.rate}
+        self.wanted = {'task': args.task, 'region': None, 'strength': 1.0, 'paused': False, 'auto': True, 'rate': args.rate}
         self.orders = []
         self.version, self.latest = 0, json.dumps({'loading': f'loading {args.task}'})
 
@@ -245,6 +288,8 @@ class Show:
         with self.changed:
             if asked.get('task') in TASKS:
                 self.wanted['task'] = asked['task']
+            if isinstance(asked.get('region'), str):
+                self.wanted['region'] = asked['region']
             if 'strength' in asked:
                 self.wanted['strength'] = round(min(max(float(asked['strength']), 0.0), 2.0), 2)
             if 'rate' in asked:
@@ -261,7 +306,7 @@ class Show:
             self.changed.notify_all()
 
     def run(self):
-        task, strength, seed, details = None, None, FIRST_SEED, {}
+        task, region, strength, seed, details = None, None, None, FIRST_SEED, {}
         arms, begin, whole, push, pushes_left, over_since, finished, shown = None, True, True, None, 0, None, [], None
         while True:
             with self.changed:
@@ -271,7 +316,20 @@ class Show:
                 task = wanted['task']
                 self.publish({'loading': f'loading {task}'})
                 details = self.ask('task', task)[0]
+                # A task begins with the region its adapter was searched with.
+                region = details['regions'][0]
+                with self.changed:
+                    self.wanted['region'] = wanted['region'] = region['name']
                 seed, begin, finished = FIRST_SEED, True, []
+            if wanted['region'] != region['name']:
+                chosen = [one for one in details['regions'] if one['name'] == wanted['region']]
+                if chosen:
+                    region = chosen[0]
+                    self.ask('region', region['name'])
+                    begin, finished = True, []
+                else:
+                    with self.changed:
+                        self.wanted['region'] = wanted['region'] = region['name']
             if wanted['strength'] != strength:
                 # An episode played at two strengths is not counted, and the totals are of one strength.
                 strength, whole, finished = wanted['strength'], False, []
@@ -312,7 +370,8 @@ class Show:
                 self.publish({
                     'task': task, 'tasks': TASKS, 'seed': seed, 'strength': strength, 'paused': wanted['paused'],
                     'auto': wanted['auto'], 'rate': wanted['rate'], 'whole': whole, 'pushing': pushes_left > 0,
-                    'limit': details['limit'], 'radius': details['radius'], 'length': 100,
+                    'limit': details['limit'], 'length': 100, 'region': region,
+                    'regions': [one['name'] for one in details['regions']],
                     'arms': [{**{name: value for name, value in one.items() if name != 'picture'},
                               'picture': base64.b64encode(one['picture']).decode()} for one in arms],
                     'totals': self.totals(finished)})

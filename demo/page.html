@@ -105,6 +105,7 @@
       <section class="card">
         <h3>Controls</h3>
         <div class="field" style="margin-top: 0"><span class="label">Task</span><div class="buttons" id="tasks"></div></div>
+        <div class="field" id="regionfield"><span class="label">Region the gripper must not enter</span><div class="buttons" id="regions"></div><p class="note" id="measured"></p></div>
         <div class="field">
           <label for="strength">Adapter strength: 0 is off, 1 is as it was evolved</label>
           <div class="slider"><input type="range" id="strength" min="0" max="2" step="0.25" value="1"><output id="strengthvalue">1</output></div>
@@ -191,6 +192,26 @@ function show(now) {
     $('tasks').dataset.made = 1;
   }
   for (const button of $('tasks').querySelectorAll('button')) button.classList.toggle('on', button.dataset.task === now.task);
+
+  // The regions of this task, made again when the task changes.
+  if ($('regions').dataset.task !== now.task) {
+    $('regions').replaceChildren();
+    for (const region of now.regions) {
+      const button = document.createElement('button');
+      button.textContent = region;
+      button.dataset.region = region;
+      button.onclick = () => send({region});
+      $('regions').appendChild(button);
+    }
+    $('regions').dataset.task = now.task;
+    $('regionfield').style.display = now.regions.length > 1 ? '' : 'none';
+  }
+  for (const button of $('regions').querySelectorAll('button')) button.classList.toggle('on', button.dataset.region === now.region.name);
+  const measured = now.region.measured;
+  $('measured').textContent = !measured ? '' :
+    `${now.region.name === 'as searched' ? 'The adapter was evolved for this region.' : 'Same adapter weights; only the cost predictor is refitted for this region.'} ` +
+    `Measured over ${measured.episodes} episodes: cost ${measured.cost.toFixed(2)} against the frozen agent's ${measured['unadapted cost'].toFixed(2)}, ` +
+    `${Math.round(100 * measured['reward kept'])}% of the reward kept.` + (measured.cost > now.limit ? ` Above the limit of ${now.limit}.` : '');
 
   now.arms.forEach((arm, i) => {
     $('picture' + i).src = 'data:image/jpeg;base64,' + arm.picture;
