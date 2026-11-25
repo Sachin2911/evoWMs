@@ -9,6 +9,7 @@ numpy, so the arithmetic can be checked on any computer:
 The checks with the real agent are in check_memory.py, which runs on the cluster.
 """
 
+import json
 import pathlib
 import tempfile
 import unittest
@@ -16,6 +17,7 @@ import unittest
 import numpy as np
 
 import adapter as adapters
+import mean_table
 from imagine import Imagination
 from look_ahead import (LENGTHS, held, hold_by_stretch, names_by_stretch, numbers_by_stretch, sizes_by_stretch,
                         squashed)
@@ -202,6 +204,33 @@ class Adapter(unittest.TestCase):
             made = adapter.decide(frozen, fixed, weights, state, frozen.propose(state), memory)
             memory = made['memory']
         self.assertLess(float(made['output'][0, shift]), -0.9)
+
+    def test_strength_scales_the_output_that_is_applied_and_nothing_else(self):
+        frozen, state, predictor = made_up()
+        adapter = adapters.MemoryAdapter(2)
+        fixed = self.fixed(frozen, state, predictor, adapter)
+        weights = (0.3 * np.random.default_rng(5).normal(size=adapter.count)).astype(np.float32)
+        proposed = frozen.propose(state)
+        memory = (0.2 * np.random.default_rng(6).normal(size=(7, 4))).astype(np.float32)
+        plain = adapter.decide(frozen, fixed, weights, state, proposed, memory)
+        at_one = adapter.decide(frozen, fixed, weights, state, proposed, memory, 1.0)
+        for name in plain:
+            self.assertEqual(plain[name].tobytes(), at_one[name].tobytes())
+        doubled = adapter.decide(frozen, fixed, weights, state, proposed, memory, 2.0)
+        # The memory averages the output as the layer gave it, whatever the strength.
+        np.testing.assert_array_equal(doubled['output'], plain['output'])
+        np.testing.assert_array_equal(doubled['memory'], plain['memory'])
+        clipped = np.clip(proposed, -1, 1)
+        gain, shift = plain['output'][:, :2], plain['output'][:, 2:]
+        moved = np.clip(clipped * (1 + 2 * gain) + 2 * shift, -1, 1)
+        np.testing.assert_array_equal(doubled['action'], np.where(moved == clipped, proposed, moved))
+        self.assertTrue((doubled['action'] != plain['action']).any())
+        self.assertEqual(doubled['action'].dtype, plain['action'].dtype)
+        # At strength 0 the adapter does nothing, and the proposed action comes back as the agent gave it.
+        np.testing.assert_array_equal(adapter.decide(frozen, fixed, weights, state, proposed, memory, 0.0)['action'], proposed)
+        # compiled() hands the strength on.
+        action, _ = adapter.compiled(frozen, strength=2.0)(state, proposed, memory, fixed, weights)
+        np.testing.assert_array_equal(action, doubled['action'])
 
     def test_steering_shifts_towards_the_cheaper_push(self):
         adapter = adapters.MemoryAdapter(2)
@@ -511,6 +540,62 @@ class Cells(unittest.TestCase):
         self.assertAlmostEqual(LimitLevel(2, 50).moved_by(16, 0.4), 0.05)
         # Imagined at 0.4 it cost 2, the limit itself: the level should be 0.4, and goes up as far as it may.
         self.assertAlmostEqual(LimitLevel(2, 50).moved_by(2, 0.4), 0.06)
+
+
+class MeanTable(unittest.TestCase):
+
+    def searches(self, folder, tasks, **changed):
+        """A run folder with one finished search per task in `tasks`; returns the weights and predictor of each.
+
+        With `changed`, the second search saved an adapter with those settings and not the others'.
+        """
+        random = np.random.default_rng(2)
+        adapter = adapters.MemoryAdapter(2, memory=False)
+        every = []
+        for number, task in enumerate(tasks):
+            one = pathlib.Path(folder) / f'task-{number:04d}'
+            one.mkdir()
+            weights = random.normal(size=adapter.count).astype(np.float32)
+            predictor = {'weights': random.normal(size=6).astype(np.float32), 'offset': np.float32(number), 'mean_cost': np.float32(1.5)}
+            saved_as = adapters.MemoryAdapter(2, **changed) if number == 1 and changed else adapter
+            with_it = {'predictor': predictor, 'sizes': np.ones(27, np.float32)}
+            adapters.save(one / 'final.npz', saved_as, np.resize(weights, saved_as.count), with_it)
+            (one / 'final.json').write_text(json.dumps({'task': f'safetygym_Safety{task}-v0'}))
+            every.append((weights, predictor))
+        return every
+
+    def test_the_mean_of_the_searches_of_one_task(self):
+        with tempfile.TemporaryDirectory() as folder:
+            every = self.searches(folder, ['PointGoal2', 'CarGoal2', 'PointGoal2', 'RacecarGoal2', 'PointGoal2'])
+            files = mean_table.searches_of(folder, 'PointGoal2')
+            self.assertEqual([file.parent.name for file in files], ['task-0000', 'task-0002', 'task-0004'])
+            self.assertEqual(len(mean_table.searches_of(folder, 'CarGoal2')), 1)       # not the Racecar one
+            mean, apart = mean_table.mean_of(files)
+            out = pathlib.Path(folder) / 'mean.npz'
+            np.savez(out, **mean, mean_of=np.array([str(file) for file in files]))
+            # It is read as scoreboard.py reads a saved adapter.
+            adapter, weights, fixed = adapters.load(out, 2, int(dict(np.load(out))['predictor_weights'].shape[0]))
+            own = [every[number] for number in (0, 2, 4)]
+            np.testing.assert_allclose(weights, np.mean([weights for weights, _ in own], 0), rtol=1e-6, atol=1e-7)
+            np.testing.assert_allclose(fixed['predictor']['offset'], 2.0)
+            self.assertEqual(weights.dtype, np.float32)
+            self.assertEqual(adapter.describe(), adapters.MemoryAdapter(2, memory=False).describe())
+            np.testing.assert_array_equal(fixed['sizes'], 1)
+            self.assertEqual(apart['sizes'], 0)
+            self.assertGreater(apart['weights'], 0)
+            # With the first search's predictor, only the weights are a mean.
+            first, _ = mean_table.mean_of(files, 'first')
+            np.testing.assert_array_equal(first['predictor_weights'], own[0][1]['weights'])
+            np.testing.assert_array_equal(first['weights'], mean['weights'])
+            with self.assertRaises(ValueError):
+                mean_table.mean_of(files[:1])
+
+    def test_adapters_of_different_settings_or_shapes_are_refused(self):
+        for changed in ({'memory': False, 'roll': 'mean'}, {'memory': False, 'stop': False}, {'memory': True}):
+            with tempfile.TemporaryDirectory() as folder:
+                self.searches(folder, ['PointGoal2'] * 3, **changed)
+                with self.assertRaises(ValueError):
+                    mean_table.mean_of(mean_table.searches_of(folder, 'PointGoal2'))
 
 
 if __name__ == '__main__':

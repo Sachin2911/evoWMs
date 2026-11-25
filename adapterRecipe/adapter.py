@@ -347,7 +347,7 @@ class MemoryAdapter:
                     table[self.action_numbers + number, column] = scale
         return np.concatenate([table.ravel(), np.zeros(self.remembered, np.float32)])
 
-    def decide(self, frozen, fixed, weights, state, proposed, memory):
+    def decide(self, frozen, fixed, weights, state, proposed, memory, strength=1.0):
         """The action to take in every state of a batch, and the memory to carry to the next decision.
 
         fixed      what is measured and never searched: `predictor`, the cost predictor,
@@ -356,6 +356,10 @@ class MemoryAdapter:
         state      the internal states, one row each
         proposed   the action the frozen agent proposed in each
         memory     the memory at this decision, one row per state; start() gives the first
+        strength   what the gains and shifts are multiplied by before they are applied to
+                   the action. It is a plain number, set when the adapter is played and
+                   never searched. The memory and `output` keep the gains and shifts as
+                   the layer gave them
 
         Returns `action`, `memory` for the next decision, and `output`: the gains and
         then the shifts.
@@ -378,6 +382,9 @@ class MemoryAdapter:
         # tanh is the ceiling inside the loop: without it a memory that feeds on itself grows without limit.
         output = xp.tanh(summed)
         gain, shift = output[:, :self.action_numbers], output[:, self.action_numbers:]
+        if strength != 1.0:
+            # The output is turned up or down after the tanh. Larger weights would not do the same: the tanh would cut them off.
+            gain, shift = strength * gain, strength * shift
         moved = xp.clip(clipped * (1 + gain) + shift, -1, 1)
         # A number that is left where it was is handed back as the agent gave it.
         action = xp.where(moved == clipped, proposed, moved)
@@ -386,18 +393,19 @@ class MemoryAdapter:
             memory = (1 - fade) * memory + fade * output
         return {'action': action, 'memory': memory, 'output': output}
 
-    def compiled(self, frozen, everything=False):
+    def compiled(self, frozen, everything=False, strength=1.0):
         """This adapter as a function of plain arrays, called as (state, proposed, memory, fixed, weights).
 
         It gives the action to take and the next memory, or with `everything` all that
-        decide() returns. Player.play takes it with the weights filled in:
+        decide() returns. `strength` is that of decide(), fixed for every call.
+        Player.play takes it with the weights filled in:
 
             act = adapter.compiled(frozen)
             player.play(seeds, adapter=lambda state, proposed, memory: act(state, proposed, memory, fixed, weights),
                         memory=adapter.start())
         """
         def adapt(state, proposed, memory, fixed, weights):
-            worked_out = self.decide(frozen, fixed, weights, state, proposed, memory)
+            worked_out = self.decide(frozen, fixed, weights, state, proposed, memory, strength)
             return worked_out if everything else (worked_out['action'], worked_out['memory'])
 
         return frozen.compiled(adapt)

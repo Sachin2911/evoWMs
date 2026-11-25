@@ -13,7 +13,9 @@ What is played is chosen with --kind:
                 With --form memory it is written in the form of the adapter with memory
                 (MemoryAdapter.steering), which reads the look-ahead by stretches
     re-rank     the re-rank over pushed actions, with --reward-weight and --cost-weight
-    saved       an adapter saved by adapter.save, given with --adapter
+    saved       an adapter saved by adapter.save, given with --adapter. With --strength S
+                its gains and shifts are multiplied by S before they are applied to the
+                action; its weights and its memory are left as they are
 
 All but `saved` take the cost predictor from --predictor and measure the sizes of the
 look-ahead numbers on that predictor's training episodes. A `saved` adapter brings its own.
@@ -77,6 +79,8 @@ def main():
     parser.add_argument('--kind', required=True, choices=('none', 'steering', 're-rank', 'saved'))
     parser.add_argument('--predictor', help='a cost_predictor.npz, for every kind but `saved`')
     parser.add_argument('--adapter', help='a file written by adapter.save, for kind `saved`')
+    parser.add_argument('--strength', type=float, default=1.0,
+                        help='saved: what the adapter\'s gains and shifts are multiplied by before they are applied to the action')
     parser.add_argument('--scale', type=float, default=1.0, help='steering: what its weights are multiplied by')
     parser.add_argument('--form', default='residual', choices=('residual', 'memory'), help='steering: the form it is written in')
     parser.add_argument('--look', default='likely', choices=('likely', 'mean'),
@@ -91,6 +95,8 @@ def main():
     parser.add_argument('--limit', type=float,
                         help='the cost limit: the highest mean episode cost that counts as safe (default: the task\'s own)')
     args = parser.parse_args()
+    if args.strength != 1.0 and args.kind != 'saved':
+        parser.error('--strength is for --kind saved')
 
     out = pathlib.Path(os.environ.get('MS_RUN_DIR', '.'))
     # DreamerV3 on Safety-Gymnasium or TD-MPC2 on Meta-World, by the checkpoint's name.
@@ -107,7 +113,9 @@ def main():
         probe = dict(np.load(args.adapter))
         state_numbers = int(probe['predictor_weights'].shape[0])
         adapter, weights, fixed = adapters.load(args.adapter, action_numbers, state_numbers)
-        described.update({'adapter file': args.adapter, **adapter.describe()})
+        if args.strength != 1.0 and adapter.form != 'memory':
+            raise SystemExit(f'scoreboard.py: --strength is for an adapter of form memory, and {args.adapter} is of form {adapter.form}')
+        described.update({'adapter file': args.adapter, **adapter.describe(), 'strength': args.strength})
     elif args.kind == 'steering' and args.form == 'memory':
         predictor, trained, _ = read(args.predictor, args.checkpoint)
         for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
@@ -139,7 +147,8 @@ def main():
             'sizes': [float(size) for size in fixed['sizes']]})
     memory = None
     if args.kind != 'none':
-        compiled = adapter.compiled(frozen)
+        # At strength 1 the adapter is made exactly as it was before there was a strength.
+        compiled = adapter.compiled(frozen) if args.strength == 1.0 else adapter.compiled(frozen, strength=args.strength)
         weights = np.asarray(weights, np.float32)
         if adapter.form == 'memory':
             memory = adapter.start()
