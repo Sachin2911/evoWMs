@@ -78,6 +78,9 @@ def main():
     parser.add_argument('--checkpoint', required=True)
     parser.add_argument('--kind', required=True, choices=('none', 'steering', 're-rank', 'saved'))
     parser.add_argument('--predictor', help='a cost_predictor.npz, for every kind but `saved`')
+    parser.add_argument('--tail', help='a tail.npz of tail.py, whose cost to come the look-ahead adds to every cost it reads: '
+                                       'for steering of form memory, and for a `saved` adapter with memory, where it takes the '
+                                       'place of the tail saved with the adapter (default: none, or the saved one)')
     parser.add_argument('--adapter', help='a file written by adapter.save, for kind `saved`')
     parser.add_argument('--strength', type=float, default=1.0,
                         help='saved: what the adapter\'s gains and shifts are multiplied by before they are applied to the action')
@@ -109,22 +112,43 @@ def main():
         args.limit = player.cost_limit
     described = {'kind': args.kind}
     act = None
+    with_tail = {}
+    if args.tail:
+        if not (args.kind == 'saved' or (args.kind == 'steering' and args.form == 'memory')):
+            raise SystemExit('--tail is for an adapter with memory: --kind saved, or --kind steering --form memory')
+        from tail import read as read_tail
+        with_tail = {'tail': read_tail(args.tail, args.checkpoint)[0]}
     if args.kind == 'saved':
         probe = dict(np.load(args.adapter))
         state_numbers = int(probe['predictor_weights'].shape[0])
         adapter, weights, fixed = adapters.load(args.adapter, action_numbers, state_numbers)
         if args.strength != 1.0 and adapter.form != 'memory':
             raise SystemExit(f'scoreboard.py: --strength is for an adapter of form memory, and {args.adapter} is of form {adapter.form}')
+        if with_tail and adapter.form != 'memory':
+            raise SystemExit('--tail is for an adapter with memory, and the saved one has none')
+        # The sizes saved with the adapter were measured with the tail it was searched with.
         described.update({'adapter file': args.adapter, **adapter.describe(), 'strength': args.strength})
+        if 'tail' in fixed:
+            described['tail'] = 'saved with the adapter'
+        if with_tail:
+            described['tail'] = args.tail
+            described['tail saved with the adapter'] = (
+                'none' if 'tail' not in fixed else 'the same' if all(
+                    np.array_equal(fixed['tail'].get(name), value) for name, value in with_tail['tail'].items()) else 'another')
+            if described['tail saved with the adapter'] != 'the same':
+                print(f'the adapter was saved with {"no" if "tail" not in fixed else "another"} tail, so its sizes were not '
+                      f'measured with the tail of {args.tail}', flush=True)
+            fixed = {**fixed, **with_tail}
     elif args.kind == 'steering' and args.form == 'memory':
         predictor, trained, _ = read(args.predictor, args.checkpoint)
         for_gpu = {name: predictor[name] for name in predictor if name != 'ahead'}
         adapter = adapters.MemoryAdapter(action_numbers, roll=args.look)
-        fixed = {'predictor': for_gpu, 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'),
-                                                                    adapter.lengths, adapter.stop, adapter.roll)}
+        fixed = {'predictor': for_gpu, **with_tail,
+                 'sizes': measured_by_stretch(frozen, for_gpu, files_of(trained, 'training'),
+                                              adapter.lengths, adapter.stop, adapter.roll, with_tail.get('tail'))}
         weights = adapter.steering(args.scale)
         described.update({
-            'scale': args.scale, 'predictor': args.predictor, **adapter.describe(),
+            'scale': args.scale, 'predictor': args.predictor, **({'tail': args.tail} if args.tail else {}), **adapter.describe(),
             'episodes behind the predictor': trained['files']['training'][2] + trained['files']['validation'][2]})
     elif args.kind != 'none':
         predictor, trained, _ = read(args.predictor, args.checkpoint)

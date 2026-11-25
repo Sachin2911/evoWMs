@@ -207,7 +207,7 @@ def expected(xp, predictor, numbers):
     return predictor['mean_cost'] / (1 + xp.exp(-score))
 
 
-def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS, roll='likely'):
+def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS, roll='likely', tail=None):
     """Imagines holding each of `actions` to the last of `lengths`, and reads the sums at every one of them.
 
     With roll 'likely' every imagined state takes the classes the model finds most
@@ -218,6 +218,11 @@ def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS, roll='li
     one column per state. A cost is the expected cost added up to that length. A reward
     is the predicted reward added up to that length, with the value estimate of the state
     reached there for the reward still to come.
+
+    With `tail`, a predictor of the cost to come that tail.py fitted, a cost read at a
+    length also has what the tail expects after the state reached there, as a reward has
+    the value estimate. Without it a future that stops keeps its reward to come and shows
+    no cost to come. The tail is added to what is read, not to the sum that is carried on.
     """
     xp = frozen.xp
     count, states, action_numbers = actions.shape
@@ -231,7 +236,8 @@ def hold_by_stretch(frozen, predictor, state, actions, lengths=LENGTHS, roll='li
         cost = cost + expected(xp, predictor, frozen.numbers(state))
         reward = reward + earned
         if decision in lengths:
-            costs.append(cost.reshape(count, states))
+            to_come = cost if tail is None else cost + expected(xp, tail, frozen.numbers(state))
+            costs.append(to_come.reshape(count, states))
             rewards.append((reward + frozen.worth(state)).reshape(count, states))
     return {'cost': xp.stack(costs), 'reward': xp.stack(rewards)}
 
@@ -286,21 +292,27 @@ def squashed(xp, numbers, sizes):
     return xp.sign(scaled) * xp.log1p(xp.abs(scaled))
 
 
-def read_by_stretch(frozen, predictor, state, proposed, lengths=LENGTHS, stop=True, roll='likely'):
+def read_by_stretch(frozen, predictor, state, proposed, lengths=LENGTHS, stop=True, roll='likely', tail=None):
     """The unsquashed look-ahead numbers of every state of a batch, by stretch."""
-    return numbers_by_stretch(frozen, hold_by_stretch(frozen, predictor, state, held(frozen, proposed, stop), lengths, roll))
+    return numbers_by_stretch(frozen, hold_by_stretch(frozen, predictor, state, held(frozen, proposed, stop), lengths, roll, tail))
 
 
-def measured_by_stretch(frozen, predictor, files, lengths=LENGTHS, stop=True, roll='likely'):
-    """The sizes of the look-ahead numbers over every decision of the saved episodes in `files`."""
+def measured_by_stretch(frozen, predictor, files, lengths=LENGTHS, stop=True, roll='likely', tail=None):
+    """The sizes of the look-ahead numbers over every decision of the saved episodes in `files`.
+
+    With `tail` they are the sizes of the numbers with the cost to come added, which are
+    the numbers an adapter with that tail reads.
+    """
     import numpy as np
 
-    def look(state, proposed, predictor):
-        return read_by_stretch(frozen, predictor, state, proposed, lengths, stop, roll)
+    def look(state, proposed, predictor, tail=None):
+        return read_by_stretch(frozen, predictor, state, proposed, lengths, stop, roll, tail)
 
     look = frozen.compiled(look)
+    # Without a tail the call is the one it always was, so nothing about it changes.
+    with_tail = () if tail is None else (tail,)
     numbers = []
     for file in files:
         saved = np.load(file)
-        numbers.append(look(frozen.written_out(frozen.kept(saved)), saved['proposed'], predictor))
+        numbers.append(look(frozen.written_out(frozen.kept(saved)), saved['proposed'], predictor, *with_tail))
     return sizes_by_stretch(np.concatenate(numbers), len(lengths))

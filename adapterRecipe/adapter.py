@@ -98,12 +98,17 @@ def save(path, adapter, weights, fixed):
     else:
         settings.update(size=adapter.size or '', decisions=adapter.decisions, push=adapter.push,
                         hidden=adapter.hidden, mixtures=adapter.mixtures)
-    # Every array of the cost predictor is saved under its own name, with predictor_ in front.
-    np.savez(path, **settings, **{f'predictor_{name}': value for name, value in fixed['predictor'].items()})
+    # Every array of the cost predictor is saved under its own name, with predictor_ in front,
+    # and every array of the tail, if the adapter reads one, with tail_ in front.
+    np.savez(path, **settings, **{f'predictor_{name}': value for name, value in fixed['predictor'].items()},
+             **{f'tail_{name}': value for name, value in (fixed.get('tail') or {}).items()})
 
 
 def load(path, action_numbers, state_numbers=None):
-    """Reads what save() wrote: the adapter, its weights, and the cost predictor and sizes it works with."""
+    """Reads what save() wrote: the adapter, its weights, and the cost predictor and sizes it works with.
+
+    An adapter that was saved with a tail (tail.py) gets it back as `tail`.
+    """
     saved = np.load(path)
     if str(saved['form']) == 'memory':
         adapter = MemoryAdapter(action_numbers, tuple(int(length) for length in saved['lengths']),
@@ -113,7 +118,11 @@ def load(path, action_numbers, state_numbers=None):
         adapter = Adapter(str(saved['form']), str(saved['size']) or None, action_numbers, state_numbers,
                           int(saved['decisions']), float(saved['push']), int(saved['hidden']), int(saved['mixtures']))
     predictor = {name[len('predictor_'):]: saved[name] for name in saved.files if name.startswith('predictor_')}
-    return adapter, saved['weights'], {'predictor': predictor, 'sizes': saved['sizes']}
+    fixed = {'predictor': predictor, 'sizes': saved['sizes']}
+    tail = {name[len('tail_'):]: saved[name] for name in saved.files if name.startswith('tail_')}
+    if tail:
+        fixed['tail'] = tail
+    return adapter, saved['weights'], fixed
 
 
 class Adapter:
@@ -351,7 +360,9 @@ class MemoryAdapter:
         """The action to take in every state of a batch, and the memory to carry to the next decision.
 
         fixed      what is measured and never searched: `predictor`, the cost predictor,
-                   and `sizes`, from look_ahead.sizes_by_stretch()
+                   and `sizes`, from look_ahead.sizes_by_stretch(). With `tail`, a
+                   predictor of the cost to come (tail.py), every cost the look-ahead
+                   reads has it added, and the sizes have to be measured with it too
         weights    the adapter's `count` weights, in one row
         state      the internal states, one row each
         proposed   the action the frozen agent proposed in each
@@ -370,7 +381,8 @@ class MemoryAdapter:
         state = {name: state[name] for name in frozen.names}
         proposed = frozen.as_float(proposed)
         clipped = xp.clip(proposed, -1, 1)
-        imagined = hold_by_stretch(frozen, fixed['predictor'], state, held(frozen, proposed, self.stop), self.lengths, self.roll)
+        imagined = hold_by_stretch(frozen, fixed['predictor'], state, held(frozen, proposed, self.stop), self.lengths, self.roll,
+                                   fixed.get('tail'))
         inputs = squashed(xp, numbers_by_stretch(frozen, imagined), fixed['sizes'])
 
         table = weights[:self._in_table].reshape(self.outputs, self._columns)
