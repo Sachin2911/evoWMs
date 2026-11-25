@@ -66,17 +66,9 @@ import numpy as np
 from cost_predictor import STRENGTHS, auroc, auroc_range, fit, misfit, score
 from episodes import Player
 from look_ahead import expected
+from tail import to_come as coming
 
 ANSWERS = ('weighted sum', 'hidden layer', 'as now', 'simulator')
-
-
-def coming(cost, ahead):
-    """For every entry of an episode, the cost charged over the `ahead` entries after it.
-
-    The last `ahead` entries have no full window after them, and get no number.
-    """
-    in_window = np.lib.stride_tricks.sliding_window_view(cost[1:], ahead).sum(-1)
-    return np.concatenate([in_window, np.full(ahead, np.nan)])
 
 
 def following(actions, furthest):
