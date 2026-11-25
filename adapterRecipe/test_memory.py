@@ -17,7 +17,7 @@ import numpy as np
 
 import adapter as adapters
 from imagine import Imagination
-from look_ahead import (LENGTHS, held, hold_by_stretch, names_by_stretch, numbers_by_stretch, sizes_by_stretch,
+from look_ahead import (LENGTHS, expected, held, hold_by_stretch, names_by_stretch, numbers_by_stretch, sizes_by_stretch,
                         squashed)
 
 
@@ -94,6 +94,38 @@ class LookAhead(unittest.TestCase):
         np.testing.assert_allclose(by_stretch.reshape(7, 3, 11).sum(1), whole, rtol=1e-4, atol=1e-4)
         first = numbers_by_stretch(frozen, hold_by_stretch(frozen, predictor, state, actions, (5,)))
         np.testing.assert_allclose(by_stretch[:, :11], first, rtol=1e-5, atol=1e-5)
+
+    def test_the_tail_is_added_to_what_is_read_and_not_carried_on(self):
+        frozen, state, predictor = made_up()
+        tail = {'weights': np.random.default_rng(2).normal(size=6).astype(np.float32), 'offset': np.float32(0.5),
+                'mean_cost': np.float32(4)}
+        actions = held(frozen, frozen.propose(state))
+        plain = hold_by_stretch(frozen, predictor, state, actions)
+        read = hold_by_stretch(frozen, predictor, state, actions, tail=tail)
+        np.testing.assert_array_equal(read['reward'], plain['reward'])
+        # At each length the cost has the tail of the state reached there, and of no earlier one.
+        count, states, _ = actions.shape
+        rolled, flat = {'z': np.concatenate([state['z']] * count)}, actions.reshape(count * states, -1)
+        for decision in range(1, max(LENGTHS) + 1):
+            rolled, _ = frozen.step(rolled, flat, sample=False)
+            if decision in LENGTHS:
+                layer = LENGTHS.index(decision)
+                to_come = expected(np, tail, rolled['z']).reshape(count, states)
+                self.assertTrue((to_come > 0).all())
+                np.testing.assert_allclose(read['cost'][layer], plain['cost'][layer] + to_come, rtol=1e-5)
+
+    def test_the_cost_to_come(self):
+        import tail
+        np.testing.assert_array_equal(tail.to_come(np.arange(6.0), 2), [3, 5, 7, 9, np.nan, np.nan])
+        random = np.random.default_rng(0)
+        numbers = random.normal(size=(3000, 6)).astype(np.float32)
+        amounts = random.poisson(np.exp(numbers[:, 0] - 1)).astype(np.float32)
+        fitted = tail.fit(numbers, amounts)
+        self.assertEqual(float(fitted['mean_cost']), float(amounts.max()))
+        guessed = expected(np, fitted, numbers)
+        # Fitted as shares of the ceiling, the predicted mean is the real one, and more is predicted where more came.
+        self.assertAlmostEqual(float(guessed.mean()), float(amounts.mean()), places=2)
+        self.assertGreater(np.corrcoef(guessed, amounts)[0, 1], 0.5)
 
     def test_a_push_that_changes_nothing_reads_zero(self):
         frozen, state, predictor = made_up()
@@ -305,7 +337,7 @@ class MadeUpPlayer:
 class Search(unittest.TestCase):
     """search.py from end to end with the made-up agent: that every way of searching runs and leaves its files."""
 
-    def run_search(self, *options):
+    def run_search(self, *options, with_tail=False):
         import contextlib
         import io
         import json
@@ -328,6 +360,13 @@ class Search(unittest.TestCase):
                 with mock.patch.object(sys, 'argv', ['cost_predictor.py', '--episodes', str(folder / 'episodes'),
                                                      '--test', '2', '--validation', '2', '--out', str(folder)]):
                     cost_predictor.main()
+                if with_tail:
+                    import tail
+                    with mock.patch.object(sys, 'argv', ['tail.py', '--checkpoint', 'made-up.ckpt', '--episodes',
+                                                         str(folder / 'episodes'), '--ahead', '5', '--test', '2',
+                                                         '--validation', '2', '--out', str(folder / 'tails' / 'tail.npz')]):
+                        tail.main()
+                    options += ('--tail', str(folder / 'tails' / 'tail.npz'))
                 with mock.patch.object(sys, 'argv', ['search.py', '--checkpoint', 'made-up.ckpt', '--predictor',
                                                      str(folder / 'cost_predictor.npz'), '--checks', '3', '--generations', '2',
                                                      '--episodes', '2', '--finalists', '2', '--more', '2', '--starts', '24',
@@ -342,6 +381,10 @@ class Search(unittest.TestCase):
         self.assertEqual(final['generations'], 6)
         self.assertEqual(final['real episodes'], {'behind the first predictor': 10, 'played by the search': 10})
         self.assertEqual(weights.shape, (adapter.count,))
+        # A search with a tail says which, and saves it with the adapter; one without saves none.
+        self.assertEqual(final['tail'] is not None, with_tail)
+        self.assertEqual('tail' in fixed, with_tail)
+        self.fixed = fixed
         return final, checks, adapter, files
 
     def test_stall_check(self):
@@ -394,6 +437,16 @@ class Search(unittest.TestCase):
         for check in checks:
             self.assertEqual(check['judged over the window'], check['judged cost'])
         self.assertEqual({finalist['episodes'] for finalist in final['finalists']}, {4})
+
+    def test_one_score_with_a_tail(self):
+        self.run_search()
+        without = self.fixed['sizes']
+        self.run_search(with_tail=True)
+        self.assertEqual(set(self.fixed['tail']), {'weights', 'offset', 'mean_cost'})
+        # The sizes saved with the adapter are those of the numbers with the tail: the costs differ, the rewards do not.
+        cost, reward = (np.array([name.startswith(kind) for name in names_by_stretch(2)]) for kind in ('cost', 'reward'))
+        self.assertTrue((self.fixed['sizes'][cost] != without[cost]).all())
+        np.testing.assert_array_equal(self.fixed['sizes'][reward], without[reward])
 
     def test_one_score_cautious_and_damped_without_memory(self):
         final, checks, adapter, files = self.run_search('--cautious', '--damped', '--no-memory')

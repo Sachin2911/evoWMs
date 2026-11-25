@@ -86,9 +86,18 @@ def predicted(predictor, numbers):
     return np.asarray(expected(np, predictor, np.asarray(numbers, np.float32)), np.float64)
 
 
-def read(file):
-    """Reads a tail this script saved, as the arrays look_ahead.expected() takes, and the decisions it looks ahead."""
+def read(file, checkpoint=None):
+    """Reads a tail this script saved, as the arrays look_ahead.expected() takes, and the decisions it looks ahead.
+
+    With `checkpoint` it stops if the tail was fitted to the states of another agent.
+    """
+    file = pathlib.Path(file)
     saved = dict(np.load(file))
+    fitted = file.with_suffix('.json')
+    if checkpoint is not None and fitted.exists():
+        fitted_to = json.loads(fitted.read_text())['checkpoint']
+        if fitted_to != pathlib.Path(checkpoint).name:
+            raise SystemExit(f'the tail was fitted to the states of {fitted_to}')
     return saved, int(saved.pop('ahead'))
 
 
