@@ -183,6 +183,20 @@ class Player:
             self._simulator_wrapper._render = drawn
         return np.array(rewards, np.float32), np.array(costs, np.float32)
 
+    def replay_watched(self, seed, actions):
+        """replay(), with what the simulator itself reported at each decision as well.
+
+        The third thing returned is what play() adds to an episode when `watch` is set:
+        the cost by kind of object, the speed, the place and the distances, with one
+        entry per decision and the entry at reset first.
+        """
+        was, self.watch = self.watch, True
+        try:
+            rewards, costs = self.replay(seed, actions)
+        finally:
+            self.watch = was
+        return rewards, costs, self._by_decision(len(rewards) + 1)
+
     def play(self, seeds, adapter=None, memory=None):
         """Plays one episode per seed, with `adapter` if given, and hands each over as soon as it ends.
 
