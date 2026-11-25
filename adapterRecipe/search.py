@@ -28,6 +28,16 @@ plays in the simulator, and from those episodes:
                     whole of the episode that earned the least. The second is how a stall
                     gets among the starting states without anything having to detect one
 
+Many of the kept costly states are already being charged, or lie a few decisions from a
+cost, where no action changes what follows. That cost is in every candidate's score alike.
+With --settled:
+
+    no roll         starts in a state that is being charged
+    the costly      states kept are those 10 to 40 decisions before a cost begins, in place
+                    of the charged state and the few decisions before it
+    the cost        of a roll is counted from its 11th decision on, for the candidate and
+                    for the unadapted agent alike. Reward is counted over the whole roll
+
 How a candidate is scored, and which adapter is the current best, is one of two ways.
 
 With one score (the default):
@@ -132,6 +142,10 @@ from imagine import Imagination
 from look_ahead import measured_by_stretch
 
 MOST_THE_PRICE_CHANGES = 1.5    # at one check, up or down
+# With --settled:
+NEAREST_BEFORE_A_COST = 10      # a kept costly state lies at least this many decisions before a cost begins,
+FURTHEST_BEFORE_A_COST = 40     # and at most this many
+LEFT_OUT_OF_THE_COST = 10       # the first decisions of a roll, which its cost is not counted over
 
 
 def player_of(checkpoint):
@@ -143,17 +157,38 @@ def player_of(checkpoint):
     return Player(checkpoint)
 
 
-def places(frozen, episode, before, memory):
+def before_a_cost(cost):
+    """Which entries of an episode lie 10 to 40 decisions before a cost begins and are not charged themselves.
+
+    A cost begins at an entry that is charged where the entry before it was not. One that
+    begins in the first 10 entries has no such entries before it.
+    """
+    charged = np.asarray(cost) > 0
+    begins = np.flatnonzero(charged & ~np.concatenate([[False], charged[:-1]]))
+    marked = np.zeros(len(charged), bool)
+    for entry in begins:
+        marked[max(0, entry - FURTHEST_BEFORE_A_COST):max(0, entry - NEAREST_BEFORE_A_COST + 1)] = True
+    return marked & ~charged
+
+
+def places(frozen, episode, before, memory, settled=False):
     """The states of an episode a roll can start from, each with the adapter's memory there, and which are failures.
 
     A failure is a state at which a cost was charged, or one of the `before` decisions
     leading up to it. The last entry of an episode is left out: no action was taken there.
     An episode played without a memory starts every roll with the empty one, `memory`.
+
+    With `settled` a failure is a state 10 to 40 decisions before a cost begins, a cost
+    that begins at the last entry included. The states then also say which of them were
+    being charged, for drawn() to pass over.
     """
     last = len(episode['cost']) - 1
     states = frozen.kept(episode, slice(0, last))
     states['memory'] = episode['memory'][:last] if 'memory' in episode else np.repeat(memory, last, 0)
     cost = episode['cost'][:last]
+    if settled:
+        states['charged'] = cost > 0
+        return states, before_a_cost(episode['cost'])[:last]
     failed = np.zeros(last, bool)
     for entry in np.flatnonzero(cost > 0):
         failed[max(0, entry - before):entry + 1] = True
@@ -170,23 +205,39 @@ def only(states, chosen):
     return {name: rows[chosen] for name, rows in states.items()}
 
 
-def drawn(frozen, latest, kept, count, random):
+def startable(states, settled):
+    """The rows of a set of states a roll may start from: all of them, or with `settled` those not being charged."""
+    if not states:
+        return np.zeros(0, int)
+    return np.flatnonzero(~states['charged']) if settled else np.arange(len(states['memory']))
+
+
+def drawn(frozen, latest, kept, count, random, settled=False):
     """`count` starting states with the memory at each.
 
     kept    the sets of states that are kept for good, each with the share of the starting
             states it makes up, as (states, share). A set that is empty, or smaller than
             its share, gives what it has. The rest come from `latest`.
+
+    With `settled` no state that is being charged is drawn, from `latest` or from a kept
+    set, and a set gives what is left of it. If every state of `latest` is being charged
+    there is nothing else to start from: it is drawn from as it is, and that is printed.
     """
     picked, left = [], count
     for states, share in kept:
-        have = len(states['memory']) if states else 0
-        number = min(int(share * count), have)
+        rows = startable(states, settled)
+        number = min(int(share * count), len(rows))
         if number:
-            picked.append(only(states, random.choice(have, number, replace=False)))
+            picked.append(only(states, rows[random.choice(len(rows), number, replace=False)]))
             left -= number
-    picked.append(only(latest, random.choice(len(latest['memory']), left, replace=len(latest['memory']) < left)))
+    rows = startable(latest, settled)
+    if not len(rows):
+        print(f'settled: all {len(latest["memory"])} of the latest states are being charged, so rolls start in them', flush=True)
+        rows = np.arange(len(latest['memory']))
+    picked.append(only(latest, rows[random.choice(len(rows), left, replace=len(rows) < left)]))
     picked = together(picked)
     memory = picked.pop('memory')
+    picked.pop('charged', None)
     return frozen.written_out(picked), memory
 
 
@@ -244,6 +295,10 @@ def main():
     parser.add_argument('--failures', type=float, default=0.25, help='the share of them that are kept costly states')
     parser.add_argument('--lowest', type=float, default=0.25,
                         help='the share of them from the kept lowest-earning episodes; 0 keeps none')
+    parser.add_argument('--settled', action='store_true',
+                        help='leave out cost that no action can change: no roll starts in a charged state, the kept costly '
+                             f'states are those {NEAREST_BEFORE_A_COST} to {FURTHEST_BEFORE_A_COST} decisions before a cost '
+                             f'begins, and the first {LEFT_OUT_OF_THE_COST} decisions of a roll are left out of its cost')
     parser.add_argument('--roll', type=int, default=40, help='decisions of an imagined roll')
     parser.add_argument('--generations', type=int, default=5, help='between two checks')
     parser.add_argument('--checks', type=int, default=15)
@@ -318,7 +373,7 @@ def main():
 
     # The starting states begin as those of the unadapted episodes behind the predictor.
     unadapted = [np.load(file) for file in began_with]
-    seen = [places(frozen, episode, before, empty) for episode in unadapted]
+    seen = [places(frozen, episode, before, empty, args.settled) for episode in unadapted]
     latest = together([states for states, _ in seen])
     failures = together([only(states, failed) for states, failed in seen])
     lowest = None
@@ -352,7 +407,7 @@ def main():
     search = new_search(begin, args.seed)
     restarts = 0
     kept = [(failures, args.failures), (lowest, args.lowest)]
-    starts, memory = drawn(frozen, latest, kept, args.starts, random)
+    starts, memory = drawn(frozen, latest, kept, args.starts, random, args.settled)
     imagination = Imagination(frozen, adapter, fixed, starts)
     seeds = iter(range(100000 + 1000 * args.seed if args.first_seed is None else args.first_seed, 10 ** 9))
     price, generation, checked, cost_paid = 1.0, 0, [], 0.0
@@ -361,6 +416,8 @@ def main():
         raise SystemExit('--hold, --window and --fading are for the search with one score')
     if args.window < 1:
         raise SystemExit('--window counts checks, the latest included, so it is at least 1')
+    if args.settled and args.roll <= LEFT_OUT_OF_THE_COST:
+        raise SystemExit(f'--settled leaves the first {LEFT_OUT_OF_THE_COST} decisions of a roll out of its cost, so --roll is more')
     hold, most_hold, was_short = (1.0 if args.hold else 0.0), MOST_THE_PRICE_CHANGES, None
     archive = Archive() if args.archive else None
     if archive is not None:
@@ -372,15 +429,23 @@ def main():
     limit_level = LimitLevel(args.limit, unadapted_cost, MOST_THE_PRICE_CHANGES, args.damped)
     print(f'{player.task}, search seed {args.seed}, {args.search}{" with an archive" if args.archive else ""}: '
           f'{adapter.describe()}, {args.candidates} candidates a generation, {args.starts} starting states, '
-          f'rolls of {args.roll} decisions; cost limit {args.limit:g}, unadapted cost {unadapted_cost:.1f}', flush=True)
+          f'rolls of {args.roll} decisions; cost limit {args.limit:g}, unadapted cost {unadapted_cost:.1f}'
+          + (f'; settled: no roll starts in a charged state, {len(failures["memory"])} states kept from {NEAREST_BEFORE_A_COST} to '
+             f'{FURTHEST_BEFORE_A_COST} decisions before a cost begins, cost counted from decision {LEFT_OUT_OF_THE_COST + 1} of a roll'
+             if args.settled else ''), flush=True)
 
     def measured(weights, reference, seed):
-        """What a roll with `weights` shows, against the unadapted roll `reference` of the same seed and states."""
+        """What a roll with `weights` shows, against the unadapted roll `reference` of the same seed and states.
+
+        With --settled the cost of both rolls is counted from decision 11 on: what the
+        first 10 cost was mostly settled before the roll began.
+        """
         roll = imagination.roll(np.asarray(weights, np.float32), args.roll, seed, starts, fixed, memory)
+        counted = slice(LEFT_OUT_OF_THE_COST if args.settled else 0, None)
         # A share of 1 is as much as the unadapted agent. Written as a difference so that it also holds where rewards are below zero.
         earned, usual = roll['reward'].mean(), reference['reward'].mean()
         return {'reward': float(1 + (earned - usual) / max(abs(usual), 1e-9)),
-                'cost': float(roll['cost'].mean() / max(reference['cost'].mean(), 1e-9)),
+                'cost': float(roll['cost'][counted].mean() / max(reference['cost'][counted].mean(), 1e-9)),
                 'kept': float(roll['size taken'].sum() / max(roll['size proposed'].sum(), 1e-9)),
                 'moved': float(roll['moved'].mean()),
                 'change': float(roll['change'].mean())}
@@ -399,7 +464,7 @@ def main():
         for episode in episodes:
             rewards.append(float(episode['reward'].sum()))
             costs.append(float(episode['cost'].sum()))
-            seen.append(places(frozen, episode, before, empty))
+            seen.append(places(frozen, episode, before, empty, args.settled))
             new_numbers, new_amounts = rows_for_predictor(episode)
             numbers[filled:filled + len(new_amounts)], amounts[filled:filled + len(new_amounts)] = new_numbers, new_amounts
             filled += len(new_amounts)
@@ -409,7 +474,7 @@ def main():
     for check in range(args.checks):
         for _ in range(args.generations):
             started = time.perf_counter()
-            starts, memory = drawn(frozen, latest, kept, args.starts, random)
+            starts, memory = drawn(frozen, latest, kept, args.starts, random, args.settled)
             reference = imagination.roll(zero, args.roll, generation, starts, fixed, memory)
             asked = search.ask()
             scored = [{'weights': np.asarray(weights, np.float32), **measured(weights, reference, generation)} for weights in asked]
