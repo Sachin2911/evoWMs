@@ -47,6 +47,7 @@ import pathlib
 import sys
 import threading
 import time
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
@@ -68,9 +69,9 @@ SHOWN_AFTER = 2.5
 class Arm:
     """One frozen agent with its simulator, played a decision at a time, with the adapter or without."""
 
-    def __init__(self, checkpoints, adapter_folder, adapted, size):
+    def __init__(self, checkpoints, adapter_folder, adapted, size, quality):
         self.checkpoints, self.adapter_folder = pathlib.Path(checkpoints), pathlib.Path(adapter_folder)
-        self.adapted, self.size = adapted, size
+        self.adapted, self.size, self.quality = adapted, size, quality
         self.loaded = {}
 
     def choose(self, task):
@@ -208,7 +209,7 @@ class Arm:
         # The renderer keeps its markers from one picture to the next unless they are taken out.
         del renderer._markers[:]
         packed = io.BytesIO()
-        Image.fromarray(np.ascontiguousarray(image)).save(packed, 'JPEG', quality=88)
+        Image.fromarray(np.ascontiguousarray(image)).save(packed, 'JPEG', quality=self.quality)
         return packed.getvalue()
 
     def described(self):
@@ -237,9 +238,9 @@ def regions_of(adapter_folder, task, radius):
     return regions
 
 
-def arm(pipe, checkpoints, adapter_folder, adapted, size):
+def arm(pipe, checkpoints, adapter_folder, adapted, size, quality):
     """An arm in a process of its own. It answers every order it is sent with what described() gives, or with the error."""
-    one = Arm(checkpoints, adapter_folder, adapted, size)
+    one = Arm(checkpoints, adapter_folder, adapted, size, quality)
     while True:
         order = pipe.recv()
         try:
@@ -267,7 +268,8 @@ class Show:
         self.pipes = []
         for adapted in (False, True):
             ours, theirs = context.Pipe()
-            context.Process(target=arm, args=(theirs, args.checkpoints, args.adapters, adapted, args.size), daemon=True).start()
+            context.Process(target=arm, args=(theirs, args.checkpoints, args.adapters, adapted, args.size, args.quality),
+                            daemon=True).start()
             self.pipes.append(ours)
         self.changed = threading.Condition()
         self.wanted = {'task': args.task, 'region': None, 'strength': 1.0, 'paused': False, 'auto': True, 'rate': args.rate}
@@ -405,11 +407,24 @@ class Show:
 
 class Page(BaseHTTPRequestHandler):
     show = None
+    # If set, every request has to carry it, as ?key=KEY. The page hands on the one it was opened with.
+    key = None
 
     def log_message(self, *arguments):
         pass
 
+    def allowed(self):
+        """Splits the address into its path and the rest, and refuses a request without the key."""
+        address = urllib.parse.urlsplit(self.path)
+        self.path = address.path
+        if self.key and urllib.parse.parse_qs(address.query).get('key') != [self.key]:
+            self.send_error(403)
+            return False
+        return True
+
     def do_GET(self):
+        if not self.allowed():
+            return
         if self.path == '/':
             page = (HERE / 'page.html').read_bytes()
             self.send_response(200)
@@ -439,11 +454,17 @@ class Page(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if not self.allowed():
+            return
         if self.path != '/control':
             self.send_error(404)
             return
         try:
-            self.show.control(json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0)))))
+            # What the page sends is a few dozen characters; anything long is not from the page.
+            length = int(self.headers.get('Content-Length', 0))
+            if not 0 < length <= 1000:
+                raise ValueError('too long')
+            self.show.control(json.loads(self.rfile.read(length)))
             self.send_response(204)
         except (ValueError, TypeError):
             self.send_response(400)
@@ -457,16 +478,18 @@ def main():
     parser.add_argument('--task', default=TASKS[0], choices=TASKS, help='the task shown first')
     parser.add_argument('--size', type=int, default=900, help='the side of each picture, in pixels')
     parser.add_argument('--rate', type=float, default=10.0, help='decisions a second, at most')
+    parser.add_argument('--quality', type=int, default=88, help='of the pictures, as JPEG takes it: lower is a lighter page')
     parser.add_argument('--host', default='127.0.0.1', help='the address to listen on; this machine alone by default')
     parser.add_argument('--port', type=int, default=8000)
+    parser.add_argument('--key', help='a word every request has to carry, as ?key=WORD, for when others can reach the address')
     args = parser.parse_args()
 
     show = Show(args)
-    Page.show = show
+    Page.show, Page.key = show, args.key
     server = ThreadingHTTPServer((args.host, args.port), Page)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    print(f'open http://{args.host}:{args.port}', flush=True)
+    print(f'open http://{args.host}:{args.port}/' + (f'?key={args.key}' if args.key else ''), flush=True)
     show.run()
 
 
