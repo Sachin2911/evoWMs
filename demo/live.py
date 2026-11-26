@@ -23,6 +23,9 @@ What the viewer can do:
                            shoved the arm. The agent and the adapter are not told
     pause, step, replay    and choose the seed
 
+Under the pictures the page draws, decision by decision, the gains and shifts the adapter
+applied and the cost and reward of both arms so far.
+
 What is drawn that the simulator does not have: the region the gripper must not enter, as
 a red ball, and the path the gripper has taken, red where it was charged. Both are markers
 in the picture alone. The cost is ours (frozen_tdmpc2.py) and the agent never sees it.
@@ -129,23 +132,21 @@ class Arm:
         along, up = self.region['along'], self.region['up']
         self.centre = (start + target) / 2 if (along, up) == (0.5, 0.0) else (
             start + along * (target - start) + np.array([0.0, 0.0, up])).astype(np.float32)
-        self.decision, self.done, self.reward, self.success, self.output = 0, False, 0.0, False, None
-        self.path, self.charged, self.chance = [], [], []
+        self.decision, self.done, self.reward, self.success = 0, False, 0.0, False
+        # What the page draws as lines: where the gripper was and whether that was charged, the reward so far, and
+        # the gains and shifts applied at each decision.
+        self.path, self.charged, self.rewards, self.outputs = [], [], [0.0], []
         self._arrived(observation)
         return self.described()
 
     def _arrived(self, observation):
-        """Notes where the gripper is, whether that is charged, and what the cost predictor makes of the agent's state."""
-        from look_ahead import expected
-
+        """Notes where the gripper is and whether that is charged, and works out the agent's state there."""
         player, torch = self.now['player'], self.now['player']._torch
         gripper = observation[self.gripper]
         self.path.append(gripper.copy())
         self.charged.append(bool(np.linalg.norm(gripper - self.centre) < self.region['radius']))
         with torch.no_grad():
             self.latent = player.agent.model.encode(self.obs.to(player.agent.device).unsqueeze(0), None).cpu().numpy()
-        predictor = self.now['fixed']['predictor']
-        self.chance.append(float(expected(np, predictor, self.latent)[0] / predictor['mean_cost']))
 
     def step(self, strength, push):
         """Plays one decision: the lines of Player.play's loop, with the strength and the push added."""
@@ -154,19 +155,23 @@ class Arm:
             return self.described()
         # The agent's own way of acting: its encoder, then its planner, without exploration noise.
         proposed = player.agent.act(self.obs, t0=self.decision == 0, eval_mode=True).numpy()[None]
-        action, self.output = proposed, None
+        action, applied = proposed, np.zeros(2 * proposed.shape[1])
         if self.adapted and strength > 0:
             acts = self.now['at strength']
             if strength not in acts:
                 acts[strength] = self.now['adapter'].compiled(player.frozen, everything=True, strength=strength)
             worked_out = acts[strength]({'z': self.latent}, proposed, self.memory, self.now['fixed'], self.now['weights'])
-            action, self.memory, self.output = worked_out['action'], worked_out['memory'], worked_out['output'][0]
+            action, self.memory = worked_out['action'], worked_out['memory']
+            # The gains and then the shifts, as they were applied to the action: times the strength.
+            applied = strength * np.asarray(worked_out['output'][0])
+        self.outputs.append([round(float(number), 3) for number in applied])
         action = np.array(action, np.float32)
         if push is not None:
             action[0, :3] = self._direction(push)
         self.obs, reward, self.done, info = player._env.step(torch.from_numpy(action[0]))
         self.decision += 1
         self.reward += float(reward)
+        self.rewards.append(round(self.reward, 1))
         self.success = self.success or bool(info['success'])
         self._arrived(self.obs.numpy())
         return self.described()
@@ -209,8 +214,7 @@ class Arm:
     def described(self):
         return {'decision': self.decision, 'done': bool(self.done), 'reward': self.reward, 'success': self.success,
                 'cost': int(sum(self.charged)), 'inside': self.charged[-1], 'charged': list(self.charged),
-                'chance': [round(chance, 4) for chance in self.chance],
-                'output': None if self.output is None else [round(float(number), 4) for number in self.output],
+                'rewards': list(self.rewards), 'outputs': list(self.outputs) if self.adapted else [],
                 'picture': self.picture()}
 
 

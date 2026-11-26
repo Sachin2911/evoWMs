@@ -5,8 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evolve, Don't Retrain: live</title>
 <style>
-  :root { --page: #12151a; --panel: #1b2027; --ink: #e8ebef; --soft: #98a3b0; --line: #333b46;
-          --adapted: #35c486; --cost: #ff4a3d; }
+  :root {
+    color-scheme: dark;
+    --page: #12151a; --surface: #1b2027; --line: #333b46;
+    --ink: #e8ebef; --ink-2: #c1c7cf; --muted: #8b95a1; --grid: #2a313b; --axis: #3f4854;
+    /* The lines of the charts. Checked for colour-blind separation and contrast on --surface. */
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --cost: #ff4a3d;
+  }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; overflow: hidden; background: var(--page);
@@ -14,31 +20,47 @@
 
   /* The two pictures: as tall as the room above the controls, and never wider than half the screen each. */
   .scenes { display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 0; padding: 6px 6px 0; }
-  .scene { height: min(100%, calc(50vw - 9px)); aspect-ratio: 1; background: #000; border-radius: 4px; overflow: hidden; }
+  .scene { position: relative; height: min(100%, calc(50vw - 9px)); aspect-ratio: 1; background: #000; border-radius: 4px; overflow: hidden; }
   .scene img { width: 100%; height: 100%; display: block; }
+  /* A bar in the colour that arm has in the cost and reward charts. */
+  .scene::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 5px; background: var(--series-1); }
+  #scene1::before { background: var(--series-2); }
   .scene.inside { outline: 6px solid var(--cost); outline-offset: -6px; }
 
-  .strip { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 8px 26px; padding: 10px 14px 12px;
-           background: var(--panel); border-top: 1px solid var(--line); }
-  .group > span, .group > label { display: block; font-size: 12px; color: var(--soft); margin-bottom: 4px; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 5px; }
-  button { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: #252c35;
-           color: var(--ink); cursor: pointer; }
+  .strip { background: var(--surface); border-top: 1px solid var(--line); }
+  .controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 6px 24px; padding: 8px 14px 6px; }
+  .group > span, .group > label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .buttons { display: flex; gap: 5px; }
+  button { font: inherit; min-width: 34px; height: 32px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line);
+           background: #252c35; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
   button:hover { border-color: #5a6675; }
+  button:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 1px; }
   button.on { background: var(--ink); color: #12151a; border-color: var(--ink); }
   button:disabled { opacity: 0.4; cursor: default; }
-  .slider { display: flex; align-items: center; gap: 8px; }
-  input[type=range] { width: 150px; accent-color: var(--adapted); }
+  button.icon { padding: 0; width: 36px; }
+  button svg { width: 20px; height: 20px; display: block; }
+  .slider { display: flex; align-items: center; gap: 8px; height: 32px; }
+  input[type=range] { width: 140px; accent-color: var(--ink-2); }
+  #strength { accent-color: var(--series-2); }
   output { font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; font-weight: 600; }
-  .check { display: inline-flex; align-items: center; gap: 4px; color: var(--soft); margin: 0 0 0 4px; }
-  .outputs { display: grid; grid-template-columns: repeat(4, 104px); gap: 5px 12px; }
-  .dial { font-size: 12px; color: var(--soft); display: flex; justify-content: space-between; flex-wrap: wrap; }
-  .dial b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
-  .dial .track { position: relative; flex-basis: 100%; height: 9px; background: #2c343e; border-radius: 5px; margin-top: 2px; }
-  .dial .track::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: #6d7886; }
-  .dial .fill { position: absolute; top: 0; bottom: 0; background: var(--adapted); border-radius: 5px; }
+
+  .charts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; padding: 2px 16px 8px; }
+  .chart { position: relative; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 12px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .head b { color: var(--ink); font-weight: 600; font-size: 13px; }
+  .key { display: inline-block; width: 14px; height: 0; border-top: 2px solid; border-radius: 1px; vertical-align: middle; margin-right: 4px; }
+  .plot { display: block; width: 100%; height: 104px; }
+  .plot text { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .plot .grid { stroke: var(--grid); stroke-width: 1; }
+  .plot .axis { stroke: var(--axis); stroke-width: 1; }
+  .plot .cross { stroke: var(--ink-2); stroke-width: 1; }
+  .tip { position: absolute; bottom: calc(100% - 14px); z-index: 4; background: #0e1115; border: 1px solid var(--line); border-radius: 6px;
+         padding: 6px 9px; font-size: 12px; color: var(--ink-2); white-space: nowrap; pointer-events: none; }
+  .tip div { display: flex; align-items: center; gap: 6px; }
+  .tip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+  .tip .at { color: var(--muted); margin-bottom: 2px; }
   #veil { position: fixed; inset: 0; background: rgba(18, 21, 26, 0.92); display: flex; align-items: center; justify-content: center;
-          font-size: 20px; color: var(--soft); z-index: 5; }
+          font-size: 20px; color: var(--muted); z-index: 5; }
 </style>
 </head>
 <body>
@@ -50,45 +72,172 @@
 </div>
 
 <div class="strip">
-  <div class="group"><span>Task</span><div class="buttons" id="tasks"></div></div>
-  <div class="group" id="regionfield"><span>Region</span><div class="buttons" id="regions"></div></div>
-  <div class="group">
-    <label for="strength">Adapter strength</label>
-    <div class="slider"><input type="range" id="strength" min="0" max="2" step="0.25" value="1"><output id="strengthvalue">1</output></div>
-  </div>
-  <div class="group">
-    <span>Episode</span>
-    <div class="buttons"><button id="pause">Pause</button><button id="step">Step</button><button id="replay">Replay</button><button id="next">Next</button>
-      <label class="check"><input type="checkbox" id="auto" checked>auto</label></div>
-  </div>
-  <div class="group">
-    <span>Push both arms</span>
-    <div class="buttons" id="pushes">
-      <button data-push="toward">into region</button><button data-push="away">away</button><button data-push="sideways">sideways</button><button data-push="up">up</button>
+  <div class="controls">
+    <div class="group"><span>Task</span><div class="buttons" id="tasks"></div></div>
+    <div class="group" id="regionfield"><span>Region</span><div class="buttons" id="regions"></div></div>
+    <div class="group">
+      <label for="strength">Adapter strength</label>
+      <div class="slider"><input type="range" id="strength" min="0" max="2" step="0.25" value="1"><output id="strengthvalue">1</output></div>
+    </div>
+    <div class="group">
+      <span>Episode</span>
+      <div class="buttons">
+        <button class="icon" id="pause"></button><button class="icon" id="step"></button><button class="icon" id="replay"></button>
+        <button class="icon" id="next"></button><button class="icon" id="auto"></button>
+      </div>
+    </div>
+    <div class="group">
+      <span>Push both arms</span>
+      <div class="buttons" id="pushes">
+        <button class="icon" data-push="toward"></button><button class="icon" data-push="away"></button>
+        <button class="icon" data-push="sideways"></button><button class="icon" data-push="up"></button>
+      </div>
+    </div>
+    <div class="group">
+      <label for="rate">Speed</label>
+      <div class="slider"><input type="range" id="rate" min="1" max="12" step="1" value="10" style="width: 100px"><output id="ratevalue">10</output></div>
     </div>
   </div>
-  <div class="group">
-    <label for="rate">Speed</label>
-    <div class="slider"><input type="range" id="rate" min="1" max="12" step="1" value="10" style="width: 100px"><output id="ratevalue">10</output></div>
-  </div>
-  <div class="group"><span>Adapter output</span><div class="outputs" id="outputs"></div></div>
+  <div class="charts" id="charts"></div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-const names = ['x', 'y', 'z', 'grip'];
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 let state = null;
 
 function send(asked) {
   fetch('/control', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(asked)});
 }
 
-// The eight bars: the gains in the top row and the shifts under them, one of each for every action number.
-for (const kind of ['gain', 'shift']) for (const name of names) {
-  const dial = document.createElement('div');
-  dial.className = 'dial';
-  dial.innerHTML = `<span>${kind} ${name}</span><b id="${kind}${name}value"></b><div class="track"><div class="fill" id="${kind}${name}"></div></div>`;
-  $('outputs').appendChild(dial);
+// ---- Icons: drawn here, so the page needs nothing from outside. Each is 24 by 24.
+const filled = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`;
+const drawn = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="${d}"/></svg>`;
+const icons = {
+  play: filled('M8 5v14l11-7z'),
+  pause: filled('M6 5h4v14H6zM14 5h4v14h-4z'),
+  step: filled('M6 5v14l10-7zM17.5 5H20v14h-2.5z'),
+  replay: drawn('M4 4v5h5M4.6 9A8 8 0 1 1 4 12'),
+  next: filled('M4 5v14l8.5-7zM12.5 5v14L21 12z'),
+  auto: drawn('M17 2l4 4-4 4M3 11V10a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3'),
+  toward: drawn('M2 12h8M7 9l3 3-3 3M21.5 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0z'),
+  away: drawn('M12.500 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0zM14.5 12H22M19 9l3 3-3 3'),
+  sideways: drawn('M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4'),
+  up: drawn('M12 20V4M6 10l6-6 6 6'),
+};
+function dress(button, icon, says) {
+  button.innerHTML = icons[icon];
+  button.title = says;
+  button.setAttribute('aria-label', says);
+}
+dress($('step'), 'step', 'One decision');
+dress($('replay'), 'replay', 'Replay this episode');
+dress($('next'), 'next', 'Next episode');
+dress($('auto'), 'auto', 'Carry on to the next episode by itself');
+const pushes = {toward: 'Push into the region', away: 'Push away from the region', sideways: 'Push sideways', up: 'Push up'};
+for (const button of $('pushes').querySelectorAll('button')) dress(button, button.dataset.push, pushes[button.dataset.push]);
+
+// ---- A line chart over the decisions of an episode, with a readout of every line where the pointer is.
+const NS = 'http://www.w3.org/2000/svg';
+function part(name, attributes, parent) {
+  const made = document.createElementNS(NS, name);
+  for (const key in attributes) made.setAttribute(key, attributes[key]);
+  if (parent) parent.appendChild(made);
+  return made;
+}
+class Chart {
+  constructor(title, series, format) {
+    this.series = series; this.format = format; this.data = series.map(() => []); this.at = null;
+    this.box = document.createElement('div'); this.box.className = 'chart';
+    const head = document.createElement('div'); head.className = 'head';
+    const name = document.createElement('b'); name.textContent = title; head.appendChild(name);
+    for (const one of series) {
+      const entry = document.createElement('span'), key = document.createElement('i');
+      key.className = 'key'; key.style.borderColor = one.colour;
+      entry.append(key, document.createTextNode(one.name)); head.appendChild(entry);
+    }
+    this.svg = part('svg', {class: 'plot', role: 'img', 'aria-label': title + ' at each decision of the episode'});
+    this.back = part('g', {}, this.svg);
+    this.cross = part('line', {class: 'cross', visibility: 'hidden'}, this.svg);
+    this.lines = series.map(one => part('path', {fill: 'none', stroke: one.colour, 'stroke-width': 2, 'stroke-linejoin': 'round',
+                                                 'stroke-linecap': 'round'}, this.svg));
+    // The dot at the end of each line, with a ring in the surface colour so that it stays clear where lines cross.
+    this.dots = series.map(one => part('circle', {r: 4, fill: one.colour, stroke: css('--surface'), 'stroke-width': 2,
+                                                  visibility: 'hidden'}, this.svg));
+    this.tip = document.createElement('div'); this.tip.className = 'tip'; this.tip.hidden = true;
+    this.box.append(head, this.svg, this.tip);
+    this.svg.addEventListener('pointermove', event => { this.pointer = event.offsetX; this.readout(); });
+    this.svg.addEventListener('pointerleave', () => { this.pointer = null; this.readout(); });
+    $('charts').appendChild(this.box);
+  }
+
+  // data: for each line, its values from decision 0 on. ticks: the values the gridlines are drawn at, lowest first.
+  draw(data, ticks, length) {
+    this.data = data; this.length = length;
+    const w = this.svg.clientWidth, h = this.svg.clientHeight, low = ticks[0], high = ticks[ticks.length - 1];
+    const left = 8 + 6.5 * Math.max(...ticks.map(tick => this.format(tick).length)), right = w - 8, top = 7, bottom = h - 17;
+    this.svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    this.x = t => left + (right - left) * t / length;
+    this.y = value => bottom - (bottom - top) * (value - low) / (high - low);
+    this.span = [left, right, top, bottom];
+
+    this.back.replaceChildren();
+    for (const tick of ticks) {
+      part('line', {class: tick === 0 ? 'axis' : 'grid', x1: left, x2: right, y1: this.y(tick), y2: this.y(tick)}, this.back);
+      part('text', {x: left - 6, y: this.y(tick) + 4, 'text-anchor': 'end'}, this.back).textContent = this.format(tick);
+    }
+    for (const t of [0, length / 2, length])
+      part('text', {x: this.x(t), y: h - 3, 'text-anchor': t === 0 ? 'start' : t === length ? 'end' : 'middle'}, this.back)
+        .textContent = t === length / 2 ? `decision ${t}` : t;
+    data.forEach((values, n) => {
+      this.lines[n].setAttribute('d', values.map((value, t) => `${t ? 'L' : 'M'}${this.x(t).toFixed(1)} ${this.y(value).toFixed(1)}`).join(''));
+      const last = values.length - 1;
+      this.dots[n].setAttribute('visibility', last < 0 ? 'hidden' : 'visible');
+      if (last >= 0) { this.dots[n].setAttribute('cx', this.x(last)); this.dots[n].setAttribute('cy', this.y(values[last])); }
+    });
+    this.readout();
+  }
+
+  // The hairline and the box of values at the decision nearest the pointer.
+  readout() {
+    const longest = Math.max(...this.data.map(values => values.length));
+    if (this.pointer == null || !longest) { this.tip.hidden = true; this.cross.setAttribute('visibility', 'hidden'); return; }
+    const [left, right, top, bottom] = this.span;
+    const t = Math.max(0, Math.min(longest - 1, Math.round((this.pointer - left) / (right - left) * this.length)));
+    for (const [name, value] of [['x1', this.x(t)], ['x2', this.x(t)], ['y1', top], ['y2', bottom]]) this.cross.setAttribute(name, value);
+    this.cross.setAttribute('visibility', 'visible');
+    this.tip.replaceChildren();
+    const at = document.createElement('div'); at.className = 'at'; at.textContent = `decision ${t}`; this.tip.appendChild(at);
+    this.series.forEach((one, n) => {
+      if (t >= this.data[n].length) return;
+      const row = document.createElement('div'), key = document.createElement('i'), value = document.createElement('b');
+      key.className = 'key'; key.style.borderColor = one.colour;
+      value.textContent = this.format(this.data[n][t]);
+      row.append(key, value, document.createTextNode(one.name)); this.tip.appendChild(row);
+    });
+    this.tip.hidden = false;
+    this.tip.style.left = Math.max(0, Math.min(this.box.clientWidth - this.tip.offsetWidth, this.x(t) - this.tip.offsetWidth / 2)) + 'px';
+  }
+}
+
+const signed = value => (value > 0 ? '+' : value < 0 ? '−' : '') + Math.abs(value).toFixed(Number.isInteger(value) ? 0 : 2);
+const whole = value => Math.round(value).toLocaleString('en-US');
+const numbers = ['x', 'y', 'z', 'grip'].map((name, n) => ({name, colour: css(`--series-${n + 1}`)}));
+const arms = [{name: 'frozen', colour: css('--series-1')}, {name: 'adapter', colour: css('--series-2')}];
+const charts = {gain: new Chart('Gain', numbers, signed), shift: new Chart('Shift', numbers, signed),
+                cost: new Chart('Cost so far', arms, whole), reward: new Chart('Reward so far', arms, whole)};
+
+function plot(now) {
+  // The adapter's output: four gains, then four shifts, at every decision so far.
+  const outputs = now.arms[1].outputs, reach = Math.max(1, now.strength);
+  charts.gain.draw([0, 1, 2, 3].map(n => outputs.map(output => output[n])), [-reach, 0, reach], now.length);
+  charts.shift.draw([0, 1, 2, 3].map(n => outputs.map(output => output[4 + n])), [-reach, 0, reach], now.length);
+  // The cost so far is how many of the decisions so far were inside the region.
+  const costs = now.arms.map(arm => { let sum = 0; return arm.charged.map(charged => sum += charged); });
+  const most = Math.max(5, 5 * Math.ceil(Math.max(...costs.map(cost => cost[cost.length - 1])) / 5));
+  charts.cost.draw(costs, [0, most / 5 % 2 ? most : most / 2, most].filter((tick, n, all) => all.indexOf(tick) === n), now.length);
+  const top = Math.max(2000, 1000 * Math.ceil(Math.max(...now.arms.map(arm => arm.rewards[arm.rewards.length - 1])) / 1000));
+  charts.reward.draw(now.arms.map(arm => arm.rewards), [0, top / 2, top], now.length);
 }
 
 function show(now) {
@@ -107,16 +256,18 @@ function show(now) {
   }
   for (const button of $('tasks').querySelectorAll('button')) button.classList.toggle('on', button.dataset.task === now.task);
 
-  // The regions of this task, made again when the task changes.
+  // The regions of this task, numbered from 1, made again when the task changes. 1 is the one the adapter was searched with.
   if ($('regions').dataset.task !== now.task) {
     $('regions').replaceChildren();
-    for (const region of now.regions) {
+    now.regions.forEach((region, n) => {
       const button = document.createElement('button');
-      button.textContent = region;
+      button.textContent = n + 1;
+      button.title = region;
+      button.setAttribute('aria-label', `Region ${n + 1}: ${region}`);
       button.dataset.region = region;
       button.onclick = () => send({region});
       $('regions').appendChild(button);
-    }
+    });
     $('regions').dataset.task = now.task;
     $('regionfield').style.display = now.regions.length > 1 ? '' : 'none';
   }
@@ -126,23 +277,18 @@ function show(now) {
     $('picture' + i).src = 'data:image/jpeg;base64,' + arm.picture;
     $('scene' + i).classList.toggle('inside', arm.inside);
   });
-
-  const output = now.arms[1].output;
-  ['gain', 'shift'].forEach((kind, k) => names.forEach((name, n) => {
-    const value = output ? now.strength * output[4 * k + n] : 0, fill = $(kind + name);
-    const shown = Math.max(-1, Math.min(1, value));
-    fill.style.left = (shown < 0 ? 50 + 50 * shown : 50) + '%';
-    fill.style.width = 50 * Math.abs(shown) + '%';
-    $(kind + name + 'value').textContent = output ? (value >= 0 ? '+' : '−') + Math.abs(value).toFixed(2) : '';
-  }));
+  plot(now);
 
   if (document.activeElement !== $('strength')) $('strength').value = now.strength;
   $('strengthvalue').textContent = now.strength;
   if (document.activeElement !== $('rate')) $('rate').value = now.rate;
   $('ratevalue').textContent = now.rate;
-  $('auto').checked = now.auto;
-  $('pause').textContent = now.paused ? 'Play' : 'Pause';
-  $('pause').classList.toggle('on', now.paused);
+  if ($('pause').dataset.paused !== String(now.paused)) {
+    dress($('pause'), now.paused ? 'play' : 'pause', now.paused ? 'Play' : 'Pause');
+    $('pause').dataset.paused = now.paused;
+  }
+  $('auto').classList.toggle('on', now.auto);
+  $('auto').setAttribute('aria-pressed', now.auto);
   const over = now.arms.every(arm => arm.done);
   $('step').disabled = !now.paused || over;
   for (const button of $('pushes').querySelectorAll('button')) button.disabled = over || now.pushing;
@@ -152,7 +298,7 @@ $('strength').oninput = () => { $('strengthvalue').textContent = $('strength').v
 $('strength').onchange = () => send({strength: Number($('strength').value)});
 $('rate').oninput = () => { $('ratevalue').textContent = $('rate').value; };
 $('rate').onchange = () => send({rate: Number($('rate').value)});
-$('auto').onchange = () => send({auto: $('auto').checked});
+$('auto').onclick = () => send({auto: !(state && state.auto)});
 $('pause').onclick = () => send({paused: !(state && state.paused)});
 $('step').onclick = () => send({order: 'step'});
 $('replay').onclick = () => send({order: 'replay'});
@@ -160,7 +306,9 @@ $('next').onclick = () => send({order: 'next'});
 for (const button of $('pushes').querySelectorAll('button')) button.onclick = () => send({push: button.dataset.push});
 // A double click on the pictures fills the screen, and another gives it back.
 $('scenes').ondblclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+window.addEventListener('resize', () => { if (state) plot(state); });
 
+dress($('pause'), 'pause', 'Pause');
 const events = new EventSource('/events');
 events.onmessage = message => show(JSON.parse(message.data));
 events.onerror = () => { $('veil').textContent = 'waiting for the demo to answer'; $('veil').style.display = 'flex'; };
