@@ -77,6 +77,9 @@ class Arm:
 
             player = frozen_tdmpc2.Player(self.checkpoints / f'{task}-1.pt')
             sim = player._env.unwrapped.sim
+            # MuJoCo draws into a buffer whose size the task's model sets, 640 by 480 unless it is made larger here.
+            shown = player._env.unwrapped.model.vis.global_
+            shown.offwidth, shown.offheight = max(shown.offwidth, self.size), max(shown.offheight, self.size)
             # The first picture makes the renderer, which the markers are then added to.
             sim.render(self.size, self.size, camera_name=CAMERA, mode='offscreen')
             # The image draws on the processor, where the table's reflections take longer than all the rest of a picture.
@@ -448,7 +451,7 @@ def main():
     parser.add_argument('--checkpoints', required=True, help='the folder of the released agents, mw-TASK-1.pt')
     parser.add_argument('--adapters', default=str(HERE / 'adapters'), help='the folder of the adapters, TASK.npz')
     parser.add_argument('--task', default=TASKS[0], choices=TASKS, help='the task shown first')
-    parser.add_argument('--size', type=int, default=480, help='the side of each picture, in pixels')
+    parser.add_argument('--size', type=int, default=900, help='the side of each picture, in pixels')
     parser.add_argument('--rate', type=float, default=10.0, help='decisions a second, at most')
     parser.add_argument('--host', default='127.0.0.1', help='the address to listen on; this machine alone by default')
     parser.add_argument('--port', type=int, default=8000)

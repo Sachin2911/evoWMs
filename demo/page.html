@@ -5,176 +5,90 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evolve, Don't Retrain: live</title>
 <style>
-  :root {
-    --page: #f4f5f7; --card: #ffffff; --ink: #16202c; --soft: #5b6878; --line: #dfe3e8;
-    --plain: #2b6cb0; --adapted: #1f8a5b; --cost: #d43a2f; --path: #19a7e0;
-    /* The side of a picture: as wide as its column, and no taller than leaves room for the numbers under it. */
-    --side: min(100%, calc(100vh - 330px));
-  }
+  :root { --page: #12151a; --panel: #1b2027; --ink: #e8ebef; --soft: #98a3b0; --line: #333b46;
+          --adapted: #35c486; --cost: #ff4a3d; }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--page); color: var(--ink);
-         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 1900px; margin: 0 auto; padding: 12px 18px 18px; }
-  h1 { font-size: 24px; margin: 0; letter-spacing: -0.01em; }
-  header p { margin: 2px 0 10px; color: var(--soft); }
-  .key { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin: 0 4px 0 10px; vertical-align: -1px; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 350px; gap: 14px; align-items: start; }
-  .arm, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  .arm h2 { font-size: 17px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
-  .arm h2 small { font-weight: 500; font-size: 13px; color: var(--soft); }
-  .arm.plain h2 { color: var(--plain); } .arm.adapted h2 { color: var(--adapted); }
-  .scene { position: relative; width: var(--side); aspect-ratio: 1; margin: 0 auto; background: #1c232b; border-radius: 6px; overflow: hidden; }
+  html, body { height: 100%; margin: 0; }
+  body { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100vh; overflow: hidden; background: var(--page);
+         color: var(--ink); font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+  /* The two pictures: as tall as the room above the controls, and never wider than half the screen each. */
+  .scenes { display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 0; padding: 6px 6px 0; }
+  .scene { height: min(100%, calc(50vw - 9px)); aspect-ratio: 1; background: #000; border-radius: 4px; overflow: hidden; }
   .scene img { width: 100%; height: 100%; display: block; }
-  .scene.inside { outline: 5px solid var(--cost); outline-offset: -5px; }
-  .flag, .done { position: absolute; top: 10px; padding: 3px 9px; border-radius: 999px; font-size: 13px; font-weight: 600;
-                 color: #fff; display: none; }
-  .flag { left: 10px; background: var(--cost); } .done { right: 10px; background: var(--adapted); }
-  .scene.inside .flag, .scene.succeeded .done { display: block; }
-  .numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 8px; }
-  .number { border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; }
-  .number b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.15; }
-  .number span { font-size: 12.5px; color: var(--soft); display: block; line-height: 1.25; }
-  .number.over b { color: var(--cost); }
-  canvas { width: 100%; display: block; }
-  .caption { font-size: 12.5px; color: var(--soft); margin: 2px 0 0; }
-  .side { display: grid; gap: 10px; }
-  .card h3 { font-size: 13px; margin: 0 0 8px; color: var(--soft); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-  .field { margin-top: 8px; }
-  .field > .label, .field > label { display: block; font-size: 13.5px; color: var(--soft); margin-bottom: 4px; }
-  .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
-  button { font: inherit; font-size: 14px; padding: 5px 9px; border-radius: 7px; border: 1px solid var(--line);
-           background: #fff; color: var(--ink); cursor: pointer; }
-  button:hover { border-color: #b7bfc9; }
-  button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
-  button:disabled { opacity: 0.45; cursor: default; }
-  .slider { display: flex; align-items: center; gap: 10px; }
-  input[type=range] { flex: 1; min-width: 0; accent-color: var(--adapted); }
-  output { font-variant-numeric: tabular-nums; min-width: 3.2ch; text-align: right; font-weight: 600; }
-  .check { font-size: 14px; display: block; margin-top: 8px; }
-  .outputs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
-  .dial { font-size: 13px; color: var(--soft); display: flex; justify-content: space-between; flex-wrap: wrap; }
-  .dial b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .dial .track { position: relative; flex-basis: 100%; height: 10px; background: #eef0f3; border-radius: 5px; margin: 2px 0 6px; }
-  .dial .track::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: #9aa5b1; }
+  .scene.inside { outline: 6px solid var(--cost); outline-offset: -6px; }
+
+  .strip { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 8px 26px; padding: 10px 14px 12px;
+           background: var(--panel); border-top: 1px solid var(--line); }
+  .group > span, .group > label { display: block; font-size: 12px; color: var(--soft); margin-bottom: 4px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 5px; }
+  button { font: inherit; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: #252c35;
+           color: var(--ink); cursor: pointer; }
+  button:hover { border-color: #5a6675; }
+  button.on { background: var(--ink); color: #12151a; border-color: var(--ink); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .slider { display: flex; align-items: center; gap: 8px; }
+  input[type=range] { width: 150px; accent-color: var(--adapted); }
+  output { font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; font-weight: 600; }
+  .check { display: inline-flex; align-items: center; gap: 4px; color: var(--soft); margin: 0 0 0 4px; }
+  .outputs { display: grid; grid-template-columns: repeat(4, 104px); gap: 5px 12px; }
+  .dial { font-size: 12px; color: var(--soft); display: flex; justify-content: space-between; flex-wrap: wrap; }
+  .dial b { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .dial .track { position: relative; flex-basis: 100%; height: 9px; background: #2c343e; border-radius: 5px; margin-top: 2px; }
+  .dial .track::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: #6d7886; }
   .dial .fill { position: absolute; top: 0; bottom: 0; background: var(--adapted); border-radius: 5px; }
-  .totals { font-size: 15px; } .totals b { font-variant-numeric: tabular-nums; }
-  .note { color: var(--soft); font-size: 12.5px; margin: 6px 0 0; }
-  #veil { position: fixed; inset: 0; background: rgba(244,245,247,0.9); display: flex; align-items: center; justify-content: center;
+  #veil { position: fixed; inset: 0; background: rgba(18, 21, 26, 0.92); display: flex; align-items: center; justify-content: center;
           font-size: 20px; color: var(--soft); z-index: 5; }
-  @media (max-width: 1050px) { .layout { grid-template-columns: 1fr 1fr; } .side { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
-                               :root { --side: 100%; } }
-  @media (max-width: 700px) { .layout, .side { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div id="veil">starting</div>
-<main>
-  <header>
-    <h1>Evolve, Don't Retrain: live</h1>
-    <p>The same frozen TD-MPC2 agent plays the same episode twice. On the right a small evolved adapter sits between
-       the agent and the robot and adjusts each action.
-       <span class="key" style="background: var(--cost)"></span>the region the gripper must not enter
-       <span class="key" style="background: var(--path)"></span>the gripper's path</p>
-  </header>
 
-  <div class="layout">
-    <section class="arm plain">
-      <h2>Frozen agent <small>as released</small></h2>
-      <div class="scene" id="scene0"><img id="picture0" alt="The frozen agent playing the task"><div class="flag">in the region</div><div class="done">task done</div></div>
-      <div class="numbers">
-        <div class="number"><b id="reward0">0</b><span>reward</span></div>
-        <div class="number" id="costbox0"><b id="cost0">0</b><span>cost: decisions in the region</span></div>
-        <div class="number"><b id="decision0">0</b><span>decision of 100</span></div>
-      </div>
-      <canvas id="line0" width="960" height="130"></canvas>
-      <p class="caption">The cost predictor's reading of the agent's state: the chance that this decision is charged. Red: charged.</p>
-    </section>
-    <section class="arm adapted">
-      <h2>Frozen agent + evolved adapter <small id="strengthnote">strength 1</small></h2>
-      <div class="scene" id="scene1"><img id="picture1" alt="The frozen agent with its adapter playing the task"><div class="flag">in the region</div><div class="done">task done</div></div>
-      <div class="numbers">
-        <div class="number"><b id="reward1">0</b><span>reward</span></div>
-        <div class="number" id="costbox1"><b id="cost1">0</b><span>cost: decisions in the region</span></div>
-        <div class="number"><b id="kept">0%</b><span>of the frozen agent's reward</span></div>
-      </div>
-      <canvas id="line1" width="960" height="130"></canvas>
-      <p class="caption">The same reading, of the agent's state in this arm.</p>
-    </section>
+<div class="scenes" id="scenes">
+  <div class="scene" id="scene0"><img id="picture0" alt="The frozen agent playing the task"></div>
+  <div class="scene" id="scene1"><img id="picture1" alt="The frozen agent with its adapter playing the task"></div>
+</div>
 
-    <aside class="side">
-      <section class="card">
-        <h3>Controls</h3>
-        <div class="field" style="margin-top: 0"><span class="label">Task</span><div class="buttons" id="tasks"></div></div>
-        <div class="field" id="regionfield"><span class="label">Region the gripper must not enter</span><div class="buttons" id="regions"></div><p class="note" id="measured"></p></div>
-        <div class="field">
-          <label for="strength">Adapter strength: 0 is off, 1 is as it was evolved</label>
-          <div class="slider"><input type="range" id="strength" min="0" max="2" step="0.25" value="1"><output id="strengthvalue">1</output></div>
-        </div>
-        <div class="field">
-          <span class="label">Episode, seed <b id="seed"></b></span>
-          <div class="buttons"><button id="pause">Pause</button><button id="step">Step</button><button id="replay">Replay</button><button id="next">Next</button></div>
-          <label class="check"><input type="checkbox" id="auto" checked> carry on to the next episode by itself</label>
-        </div>
-        <div class="field">
-          <span class="label">Push both arms for 5 decisions</span>
-          <div class="buttons" id="pushes">
-            <button data-push="toward">into the region</button><button data-push="away">away</button>
-            <button data-push="sideways">sideways</button><button data-push="up">up</button>
-          </div>
-        </div>
-        <div class="field">
-          <label for="rate">Speed: decisions a second, at most</label>
-          <div class="slider"><input type="range" id="rate" min="1" max="12" step="1" value="10"><output id="ratevalue">10</output></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h3>The adapter's output now</h3>
-        <div class="outputs" id="outputs"></div>
-        <p class="note">Action taken = the agent's action × (1 + gain) + shift. A bar runs from −1 to 1.</p>
-      </section>
-
-      <section class="card totals">
-        <h3>Episodes played here</h3>
-        <div id="totals">none finished yet</div>
-        <p class="note">Only episodes played whole at this strength with no push. The paper's numbers come from 100 episodes of each adapter.</p>
-      </section>
-    </aside>
+<div class="strip">
+  <div class="group"><span>Task</span><div class="buttons" id="tasks"></div></div>
+  <div class="group" id="regionfield"><span>Region</span><div class="buttons" id="regions"></div></div>
+  <div class="group">
+    <label for="strength">Adapter strength</label>
+    <div class="slider"><input type="range" id="strength" min="0" max="2" step="0.25" value="1"><output id="strengthvalue">1</output></div>
   </div>
-</main>
+  <div class="group">
+    <span>Episode</span>
+    <div class="buttons"><button id="pause">Pause</button><button id="step">Step</button><button id="replay">Replay</button><button id="next">Next</button>
+      <label class="check"><input type="checkbox" id="auto" checked>auto</label></div>
+  </div>
+  <div class="group">
+    <span>Push both arms</span>
+    <div class="buttons" id="pushes">
+      <button data-push="toward">into region</button><button data-push="away">away</button><button data-push="sideways">sideways</button><button data-push="up">up</button>
+    </div>
+  </div>
+  <div class="group">
+    <label for="rate">Speed</label>
+    <div class="slider"><input type="range" id="rate" min="1" max="12" step="1" value="10" style="width: 100px"><output id="ratevalue">10</output></div>
+  </div>
+  <div class="group"><span>Adapter output</span><div class="outputs" id="outputs"></div></div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
-const names = ['x', 'y', 'z', 'gripper'];
+const names = ['x', 'y', 'z', 'grip'];
 let state = null;
 
 function send(asked) {
   fetch('/control', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(asked)});
 }
 
-// The eight bars: a gain and a shift for each action number.
-for (const name of names) for (const kind of ['gain', 'shift']) {
+// The eight bars: the gains in the top row and the shifts under them, one of each for every action number.
+for (const kind of ['gain', 'shift']) for (const name of names) {
   const dial = document.createElement('div');
   dial.className = 'dial';
-  dial.innerHTML = `<span>${kind}, ${name}</span><b id="${kind}${name}value"></b><div class="track"><div class="fill" id="${kind}${name}"></div></div>`;
+  dial.innerHTML = `<span>${kind} ${name}</span><b id="${kind}${name}value"></b><div class="track"><div class="fill" id="${kind}${name}"></div></div>`;
   $('outputs').appendChild(dial);
-}
-
-function drawLine(canvas, arm, length, colour) {
-  const c = canvas.getContext('2d'), w = canvas.width, h = canvas.height, left = 8, right = w - 8, top = 8, bottom = h - 26;
-  const x = t => left + (right - left) * t / length, y = p => bottom - (bottom - top) * p;
-  c.clearRect(0, 0, w, h);
-  c.fillStyle = '#d43a2f';
-  arm.charged.forEach((charged, t) => { if (charged) c.fillRect(x(t) - 3, top, 6, bottom - top); });
-  c.strokeStyle = '#dfe3e8'; c.lineWidth = 2;
-  c.strokeRect(left, top, right - left, bottom - top);
-  c.strokeStyle = colour; c.lineWidth = 4; c.lineJoin = 'round';
-  c.beginPath();
-  arm.chance.forEach((p, t) => t ? c.lineTo(x(t), y(p)) : c.moveTo(x(t), y(p)));
-  c.stroke();
-  c.fillStyle = '#5b6878'; c.font = '26px system-ui, sans-serif';
-  c.fillText('decision 0', left, h - 2);
-  c.textAlign = 'right'; c.fillText(String(length), right, h - 2); c.textAlign = 'left';
 }
 
 function show(now) {
@@ -207,25 +121,11 @@ function show(now) {
     $('regionfield').style.display = now.regions.length > 1 ? '' : 'none';
   }
   for (const button of $('regions').querySelectorAll('button')) button.classList.toggle('on', button.dataset.region === now.region.name);
-  const measured = now.region.measured;
-  $('measured').textContent = !measured ? '' :
-    `${now.region.name === 'as searched' ? 'The adapter was evolved for this region.' : 'Same adapter weights; only the cost predictor is refitted for this region.'} ` +
-    `Measured over ${measured.episodes} episodes: cost ${measured.cost.toFixed(2)} against the frozen agent's ${measured['unadapted cost'].toFixed(2)}, ` +
-    `${Math.round(100 * measured['reward kept'])}% of the reward kept.` + (measured.cost > now.limit ? ` Above the limit of ${now.limit}.` : '');
 
   now.arms.forEach((arm, i) => {
     $('picture' + i).src = 'data:image/jpeg;base64,' + arm.picture;
     $('scene' + i).classList.toggle('inside', arm.inside);
-    $('scene' + i).classList.toggle('succeeded', arm.success);
-    $('reward' + i).textContent = Math.round(arm.reward);
-    $('cost' + i).textContent = arm.cost;
-    $('costbox' + i).classList.toggle('over', arm.cost > now.limit);
-    drawLine($('line' + i), arm, now.length, i ? '#1f8a5b' : '#2b6cb0');
   });
-  $('decision0').textContent = now.arms[0].decision;
-  $('kept').textContent = now.arms[0].reward > 0 ? Math.round(100 * now.arms[1].reward / now.arms[0].reward) + '%' : '–';
-  $('seed').textContent = now.seed;
-  $('strengthnote').textContent = now.strength > 0 ? 'strength ' + now.strength : 'adapter off';
 
   const output = now.arms[1].output;
   ['gain', 'shift'].forEach((kind, k) => names.forEach((name, n) => {
@@ -246,14 +146,6 @@ function show(now) {
   const over = now.arms.every(arm => arm.done);
   $('step').disabled = !now.paused || over;
   for (const button of $('pushes').querySelectorAll('button')) button.disabled = over || now.pushing;
-
-  const totals = now.totals;
-  if (!totals.episodes) $('totals').textContent = 'none finished yet';
-  else $('totals').innerHTML =
-    `<b>${totals.episodes}</b> episode${totals.episodes > 1 ? 's' : ''} at strength ${now.strength}: ` +
-    `the adapter kept <b>${Math.round(100 * totals['reward kept'])}%</b> of the reward, ` +
-    `at a mean cost of <b>${totals.cost[1].toFixed(2)}</b> against the frozen agent's <b>${totals.cost[0].toFixed(2)}</b>. ` +
-    `The limit is ${now.limit}.`;
 }
 
 $('strength').oninput = () => { $('strengthvalue').textContent = $('strength').value; };
@@ -266,6 +158,8 @@ $('step').onclick = () => send({order: 'step'});
 $('replay').onclick = () => send({order: 'replay'});
 $('next').onclick = () => send({order: 'next'});
 for (const button of $('pushes').querySelectorAll('button')) button.onclick = () => send({push: button.dataset.push});
+// A double click on the pictures fills the screen, and another gives it back.
+$('scenes').ondblclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 
 const events = new EventSource('/events');
 events.onmessage = message => show(JSON.parse(message.data));
